@@ -3,6 +3,7 @@
 use codex_core::AuthManager;
 use codex_core::auth::CLIENT_ID;
 use codex_core::auth::login_with_api_key;
+use codex_core::auth::read_openai_api_key_from_env;
 use codex_core::config::Config;
 use codex_login::ServerOptions;
 use codex_login::ShutdownHandle;
@@ -53,6 +54,7 @@ pub(crate) enum SignInState {
 #[derive(Clone, Default)]
 pub(crate) struct ApiKeyInputState {
     value: String,
+    prepopulated_from_env: bool,
 }
 
 #[derive(Clone)]
@@ -290,7 +292,7 @@ impl AuthModeWidget {
         ])
         .areas(area);
 
-        let intro_lines: Vec<Line> = vec![
+        let mut intro_lines: Vec<Line> = vec![
             Line::from(vec![
                 "> ".into(),
                 "Use your own OpenAI API key for usage-based billing".bold(),
@@ -299,6 +301,15 @@ impl AuthModeWidget {
             "  Paste or type your API key below. It will be stored locally in auth.json.".into(),
             "".into(),
         ];
+        if state.prepopulated_from_env {
+            intro_lines.push("  Detected OPENAI_API_KEY environment variable.".into());
+            intro_lines.push(
+                "  Paste a different key if you prefer to use another account."
+                    .dim()
+                    .into(),
+            );
+            intro_lines.push("".into());
+        }
         Paragraph::new(intro_lines)
             .wrap(Wrap { trim: false })
             .render(intro_area, buf);
@@ -355,7 +366,12 @@ impl AuthModeWidget {
                         }
                     }
                     KeyCode::Backspace => {
-                        state.value.pop();
+                        if state.prepopulated_from_env {
+                            state.value.clear();
+                            state.prepopulated_from_env = false;
+                        } else {
+                            state.value.pop();
+                        }
                         self.error = None;
                         should_request_frame = true;
                     }
@@ -363,6 +379,10 @@ impl AuthModeWidget {
                         if !key_event.modifiers.contains(KeyModifiers::CONTROL)
                             && !key_event.modifiers.contains(KeyModifiers::ALT) =>
                     {
+                        if state.prepopulated_from_env {
+                            state.value.clear();
+                            state.prepopulated_from_env = false;
+                        }
                         state.value.push(c);
                         self.error = None;
                         should_request_frame = true;
@@ -391,7 +411,12 @@ impl AuthModeWidget {
 
         let mut guard = self.sign_in_state.write().unwrap();
         if let SignInState::ApiKeyEntry(state) = &mut *guard {
-            state.value.push_str(trimmed);
+            if state.prepopulated_from_env {
+                state.value = trimmed.to_string();
+                state.prepopulated_from_env = false;
+            } else {
+                state.value.push_str(trimmed);
+            }
             self.error = None;
         } else {
             return false;
@@ -404,13 +429,24 @@ impl AuthModeWidget {
 
     fn start_api_key_entry(&mut self) {
         self.error = None;
+        let prefill_from_env = read_openai_api_key_from_env();
         let mut guard = self.sign_in_state.write().unwrap();
         match &mut *guard {
             SignInState::ApiKeyEntry(state) => {
-                state.value.clear();
+                if state.value.is_empty() {
+                    if let Some(prefill) = prefill_from_env.clone() {
+                        state.value = prefill;
+                        state.prepopulated_from_env = true;
+                    } else {
+                        state.prepopulated_from_env = false;
+                    }
+                }
             }
             _ => {
-                *guard = SignInState::ApiKeyEntry(ApiKeyInputState::default());
+                *guard = SignInState::ApiKeyEntry(ApiKeyInputState {
+                    value: prefill_from_env.clone().unwrap_or_default(),
+                    prepopulated_from_env: prefill_from_env.is_some(),
+                });
             }
         }
         drop(guard);
@@ -432,8 +468,12 @@ impl AuthModeWidget {
                     if existing.value.is_empty() {
                         existing.value.push_str(&api_key);
                     }
+                    existing.prepopulated_from_env = false;
                 } else {
-                    *guard = SignInState::ApiKeyEntry(ApiKeyInputState { value: api_key });
+                    *guard = SignInState::ApiKeyEntry(ApiKeyInputState {
+                        value: api_key,
+                        prepopulated_from_env: false,
+                    });
                 }
             }
         }

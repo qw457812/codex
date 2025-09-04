@@ -2,6 +2,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
+use std::env;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Read;
@@ -194,11 +195,12 @@ impl CodexAuth {
 
 pub const OPENAI_API_KEY_ENV_VAR: &str = "OPENAI_API_KEY";
 
-// fn read_openai_api_key_from_env() -> Option<String> {
-//     env::var(OPENAI_API_KEY_ENV_VAR)
-//         .ok()
-//         .filter(|s| !s.is_empty())
-// }
+pub fn read_openai_api_key_from_env() -> Option<String> {
+    env::var(OPENAI_API_KEY_ENV_VAR)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
 
 pub fn get_auth_file(codex_home: &Path) -> PathBuf {
     codex_home.join("auth.json")
