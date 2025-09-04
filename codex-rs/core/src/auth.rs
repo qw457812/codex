@@ -69,8 +69,7 @@ impl CodexAuth {
         Ok(access)
     }
 
-    /// Loads the available auth information from the auth.json or
-    /// OPENAI_API_KEY environment variable.
+    /// Loads the available auth information from the auth.json.
     pub fn from_codex_home(
         codex_home: &Path,
         originator: &str,
@@ -216,7 +215,7 @@ pub fn logout(codex_home: &Path) -> std::io::Result<bool> {
     }
 }
 
-/// Writes an `auth.json` that contains only the API key. Intended for CLI use.
+/// Writes an `auth.json` that contains only the API key.
 pub fn login_with_api_key(codex_home: &Path, api_key: &str) -> std::io::Result<()> {
     let auth_dot_json = AuthDotJson {
         openai_api_key: Some(api_key.to_string()),

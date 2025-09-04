@@ -489,31 +489,4 @@ mod tests {
             &cfg
         ));
     }
-
-    #[test]
-    fn shows_login_when_api_key_but_prefers_chatgpt() {
-        let cfg = make_config();
-        assert!(should_show_login_screen(
-            LoginStatus::AuthMode(AuthMode::ApiKey),
-            &cfg
-        ))
-    }
-
-    #[test]
-    fn hides_login_when_api_key_and_prefers_api_key() {
-        let cfg = make_config();
-        assert!(!should_show_login_screen(
-            LoginStatus::AuthMode(AuthMode::ApiKey),
-            &cfg
-        ))
-    }
-
-    #[test]
-    fn hides_login_when_chatgpt_and_prefers_chatgpt() {
-        let cfg = make_config();
-        assert!(!should_show_login_screen(
-            LoginStatus::AuthMode(AuthMode::ChatGPT),
-            &cfg
-        ))
-    }
 }

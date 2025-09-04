@@ -158,29 +158,17 @@ impl AuthModeWidget {
 
             vec![line1, line2]
         };
-        let chatgpt_label = if matches!(self.login_status, LoginStatus::AuthMode(AuthMode::ChatGPT))
-        {
-            "Continue using ChatGPT"
-        } else {
-            "Sign in with ChatGPT"
-        };
 
         lines.extend(create_mode_item(
             0,
             AuthMode::ChatGPT,
-            chatgpt_label,
+            "Sign in with ChatGPT",
             "Usage included with Plus, Pro, and Team plans",
         ));
-        let api_key_label = if matches!(self.login_status, LoginStatus::AuthMode(AuthMode::ApiKey))
-        {
-            "Continue using API key"
-        } else {
-            "Provide your own API key"
-        };
         lines.extend(create_mode_item(
             1,
             AuthMode::ApiKey,
-            api_key_label,
+            "Provide your own API key",
             "Pay for what you use",
         ));
         lines.push("".into());
