@@ -36,7 +36,6 @@ use codex_protocol::mcp_protocol::AddConversationListenerParams;
 use codex_protocol::mcp_protocol::AddConversationSubscriptionResponse;
 use codex_protocol::mcp_protocol::ApplyPatchApprovalParams;
 use codex_protocol::mcp_protocol::ApplyPatchApprovalResponse;
-use codex_protocol::mcp_protocol::AuthMode;
 use codex_protocol::mcp_protocol::AuthStatusChangeNotification;
 use codex_protocol::mcp_protocol::ClientRequest;
 use codex_protocol::mcp_protocol::ConversationId;
@@ -334,7 +333,6 @@ impl CodexMessageProcessor {
         request_id: RequestId,
         params: codex_protocol::mcp_protocol::GetAuthStatusParams,
     ) {
-        let preferred_auth_method: AuthMode = self.auth_manager.preferred_auth_method();
         let include_token = params.include_token.unwrap_or(false);
         let do_refresh = params.refresh_token.unwrap_or(false);
 
@@ -357,13 +355,11 @@ impl CodexMessageProcessor {
                 };
                 codex_protocol::mcp_protocol::GetAuthStatusResponse {
                     auth_method: reported_auth_method,
-                    preferred_auth_method,
                     auth_token: token_opt,
                 }
             }
             None => codex_protocol::mcp_protocol::GetAuthStatusResponse {
                 auth_method: None,
-                preferred_auth_method,
                 auth_token: None,
             },
         };

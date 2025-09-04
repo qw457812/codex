@@ -112,7 +112,6 @@ pub(crate) struct AuthModeWidget {
     pub sign_in_state: Arc<RwLock<SignInState>>,
     pub codex_home: PathBuf,
     pub login_status: LoginStatus,
-    pub preferred_auth_method: AuthMode,
     pub auth_manager: Arc<AuthManager>,
     pub config: Config,
 }
@@ -130,24 +129,6 @@ impl AuthModeWidget {
             ]),
             "".into(),
         ];
-
-        // If the user is already authenticated but the method differs from their
-        // preferred auth method, show a brief explanation.
-        if let LoginStatus::AuthMode(current) = self.login_status
-            && current != self.preferred_auth_method
-        {
-            let to_label = |mode: AuthMode| match mode {
-                AuthMode::ApiKey => "API key",
-                AuthMode::ChatGPT => "ChatGPT",
-            };
-            let msg = format!(
-                "  You’re currently using {} while your preferred method is {}.",
-                to_label(current),
-                to_label(self.preferred_auth_method)
-            );
-            lines.push(msg.into());
-            lines.push("".into());
-        }
 
         let create_mode_item = |idx: usize,
                                 selected_mode: AuthMode,

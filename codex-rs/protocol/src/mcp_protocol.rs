@@ -253,7 +253,6 @@ pub struct ExecArbitraryCommandResponse {
 pub struct GetAuthStatusResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<AuthMode>,
-    pub preferred_auth_method: AuthMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_token: Option<String>,
 }

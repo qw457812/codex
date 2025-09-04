@@ -101,7 +101,6 @@ async fn get_auth_status_with_api_key() {
     let status: GetAuthStatusResponse = to_response(resp).expect("deserialize status");
     assert_eq!(status.auth_method, Some(AuthMode::ApiKey));
     assert_eq!(status.auth_token, Some("sk-test-key".to_string()));
-    assert_eq!(status.preferred_auth_method, AuthMode::ChatGPT);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -138,5 +137,4 @@ async fn get_auth_status_with_api_key_no_include_token() {
     let status: GetAuthStatusResponse = to_response(resp).expect("deserialize status");
     assert_eq!(status.auth_method, Some(AuthMode::ApiKey));
     assert!(status.auth_token.is_none(), "token must be omitted");
-    assert_eq!(status.preferred_auth_method, AuthMode::ChatGPT);
 }

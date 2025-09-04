@@ -69,7 +69,6 @@ impl OnboardingScreen {
             auth_manager,
             config,
         } = args;
-        let preferred_auth_method = config.preferred_auth_method;
         let cwd = config.cwd.clone();
         let codex_home = config.codex_home.clone();
         let mut steps: Vec<Step> = vec![Step::Welcome(WelcomeWidget {
@@ -84,7 +83,6 @@ impl OnboardingScreen {
                 codex_home: codex_home.clone(),
                 login_status,
                 auth_manager,
-                preferred_auth_method,
                 config,
             }))
         }
