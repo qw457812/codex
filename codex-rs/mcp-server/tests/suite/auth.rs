@@ -1,9 +1,10 @@
 use std::path::Path;
 
-use codex_core::auth::login_with_api_key;
 use codex_protocol::mcp_protocol::AuthMode;
 use codex_protocol::mcp_protocol::GetAuthStatusParams;
 use codex_protocol::mcp_protocol::GetAuthStatusResponse;
+use codex_protocol::mcp_protocol::LoginApiKeyParams;
+use codex_protocol::mcp_protocol::LoginApiKeyResponse;
 use mcp_test_support::McpProcess;
 use mcp_test_support::to_response;
 use mcp_types::JSONRPCResponse;
@@ -34,6 +35,24 @@ request_max_retries = 0
 stream_max_retries = 0
 "#,
     )
+}
+
+async fn login_with_api_key_via_request(mcp: &mut McpProcess, api_key: &str) {
+    let request_id = mcp
+        .send_login_api_key_request(LoginApiKeyParams {
+            api_key: api_key.to_string(),
+        })
+        .await
+        .expect("send loginApiKey");
+
+    let resp: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
+    )
+    .await
+    .expect("loginApiKey timeout")
+    .expect("loginApiKey response");
+    let _: LoginApiKeyResponse = to_response(resp).expect("deserialize login response");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -73,7 +92,6 @@ async fn get_auth_status_no_auth() {
 async fn get_auth_status_with_api_key() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
     create_config_toml(codex_home.path()).expect("write config.toml");
-    login_with_api_key(codex_home.path(), "sk-test-key").expect("seed api key");
 
     let mut mcp = McpProcess::new(codex_home.path())
         .await
@@ -82,6 +100,8 @@ async fn get_auth_status_with_api_key() {
         .await
         .expect("init timeout")
         .expect("init failed");
+
+    login_with_api_key_via_request(&mut mcp, "sk-test-key").await;
 
     let request_id = mcp
         .send_get_auth_status_request(GetAuthStatusParams {
@@ -107,7 +127,6 @@ async fn get_auth_status_with_api_key() {
 async fn get_auth_status_with_api_key_no_include_token() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
     create_config_toml(codex_home.path()).expect("write config.toml");
-    login_with_api_key(codex_home.path(), "sk-test-key").expect("seed api key");
 
     let mut mcp = McpProcess::new(codex_home.path())
         .await
@@ -116,6 +135,8 @@ async fn get_auth_status_with_api_key_no_include_token() {
         .await
         .expect("init timeout")
         .expect("init failed");
+
+    login_with_api_key_via_request(&mut mcp, "sk-test-key").await;
 
     // Build params via struct so None field is omitted in wire JSON.
     let params = GetAuthStatusParams {

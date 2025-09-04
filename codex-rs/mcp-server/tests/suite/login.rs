@@ -1,12 +1,13 @@
 use std::path::Path;
 use std::time::Duration;
 
-use codex_core::auth::login_with_api_key;
 use codex_protocol::mcp_protocol::CancelLoginChatGptParams;
 use codex_protocol::mcp_protocol::CancelLoginChatGptResponse;
 use codex_protocol::mcp_protocol::GetAuthStatusParams;
 use codex_protocol::mcp_protocol::GetAuthStatusResponse;
 use codex_protocol::mcp_protocol::LoginChatGptResponse;
+use codex_protocol::mcp_protocol::LoginApiKeyParams;
+use codex_protocol::mcp_protocol::LoginApiKeyResponse;
 use codex_protocol::mcp_protocol::LogoutChatGptResponse;
 use mcp_test_support::McpProcess;
 use mcp_test_support::to_response;
@@ -39,12 +40,28 @@ stream_max_retries = 0
     )
 }
 
+async fn login_with_api_key_via_request(mcp: &mut McpProcess, api_key: &str) {
+    let request_id = mcp
+        .send_login_api_key_request(LoginApiKeyParams {
+            api_key: api_key.to_string(),
+        })
+        .await
+        .expect("send loginApiKey");
+
+    let resp: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
+    )
+    .await
+    .expect("loginApiKey timeout")
+    .expect("loginApiKey response");
+    let _: LoginApiKeyResponse = to_response(resp).expect("deserialize login response");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn logout_chatgpt_removes_auth() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
     create_config_toml(codex_home.path()).expect("write config.toml");
-    login_with_api_key(codex_home.path(), "sk-test-key").expect("seed api key");
-    assert!(codex_home.path().join("auth.json").exists());
 
     let mut mcp = McpProcess::new(codex_home.path())
         .await
@@ -53,6 +70,9 @@ async fn logout_chatgpt_removes_auth() {
         .await
         .expect("init timeout")
         .expect("init failed");
+
+    login_with_api_key_via_request(&mut mcp, "sk-test-key").await;
+    assert!(codex_home.path().join("auth.json").exists());
 
     let id = mcp
         .send_logout_chat_gpt_request()

@@ -84,6 +84,11 @@ pub enum ClientRequest {
         request_id: RequestId,
         params: GitDiffToRemoteParams,
     },
+    LoginApiKey {
+        #[serde(rename = "id")]
+        request_id: RequestId,
+        params: LoginApiKeyParams,
+    },
     LoginChatGpt {
         #[serde(rename = "id")]
         request_id: RequestId,
@@ -173,6 +178,16 @@ pub struct AddConversationSubscriptionResponse {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoveConversationSubscriptionResponse {}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginApiKeyParams {
+    pub api_key: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginApiKeyResponse {}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
