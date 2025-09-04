@@ -1,4 +1,5 @@
 use crate::config::CONFIG_TOML_FILE;
+use anyhow::Result;
 use codex_protocol::config_types::ReasoningEffort;
 use std::path::Path;
 use tempfile::NamedTempFile;
@@ -12,14 +13,14 @@ pub async fn set_default_model_for_profile(
     codex_home: &Path,
     profile_override: Option<&str>,
     model: &str,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let overrides: [(&[&str], &str); 1] = [(&["model"], model)];
     persist_overrides(codex_home, profile_override, &overrides).await
 }
 
 /// Persist the default `model` at the top level or active profile detected in
 /// `config.toml`. Returns `Ok(())` on success; `Err` on I/O or parse failures.
-pub async fn set_default_model(codex_home: &Path, model: &str) -> anyhow::Result<()> {
+pub async fn set_default_model(codex_home: &Path, model: &str) -> Result<()> {
     set_default_model_for_profile(codex_home, None, model).await
 }
 
@@ -31,7 +32,7 @@ pub async fn set_default_effort_for_profile(
     codex_home: &Path,
     profile_override: Option<&str>,
     effort: ReasoningEffort,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let effort_str = effort.to_string();
     let overrides: [(&[&str], &str); 1] = [(&["model_reasoning_effort"], effort_str.as_str())];
     persist_overrides(codex_home, profile_override, &overrides).await
@@ -39,7 +40,7 @@ pub async fn set_default_effort_for_profile(
 
 /// Persist the default `model_reasoning_effort` at the top level or active
 /// profile detected in `config.toml`. Returns `Ok(())` on success; `Err` on I/O or parse failures.
-pub async fn set_default_effort(codex_home: &Path, effort: ReasoningEffort) -> anyhow::Result<()> {
+pub async fn set_default_effort(codex_home: &Path, effort: ReasoningEffort) -> Result<()> {
     set_default_effort_for_profile(codex_home, None, effort).await
 }
 
@@ -49,7 +50,7 @@ async fn persist_overrides(
     codex_home: &Path,
     profile: Option<&str>,
     overrides: &[(&[&str], &str)],
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let config_path = codex_home.join(CONFIG_TOML_FILE);
 
     let mut doc = match tokio::fs::read_to_string(&config_path).await {
