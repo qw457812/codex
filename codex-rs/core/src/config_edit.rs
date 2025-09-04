@@ -4,34 +4,43 @@ use std::path::Path;
 use tempfile::NamedTempFile;
 use toml_edit::DocumentMut;
 
-/// Persist the default `model` and `model_reasoning_effort` to
-/// `CODEX_HOME/config.toml` so the selection is used across sessions.
-///
-/// If a `profile` is set in `config.toml`, this updates the corresponding
-/// `[profiles.<name>]` table; otherwise it updates the top-level keys.
-pub async fn set_default_model_and_effort(
-    codex_home: &Path,
-    model: &str,
-    effort: ReasoningEffort,
-) -> anyhow::Result<()> {
-    set_default_model_and_effort_for_profile(codex_home, None, model, effort).await
-}
-
-/// Persist defaults under the specified profile if provided; otherwise, if a
-/// `profile` is set in `config.toml`, use it; if neither is present, update
-/// the top-level keys.
-pub async fn set_default_model_and_effort_for_profile(
+/// Persist the default `model` to `CODEX_HOME/config.toml` so the selection
+/// is used across sessions. If a `profile` is set in `config.toml`, this
+/// updates the corresponding `[profiles.<name>]` table; otherwise it updates
+/// the top-level key.
+pub async fn set_default_model_for_profile(
     codex_home: &Path,
     profile_override: Option<&str>,
     model: &str,
+) -> anyhow::Result<()> {
+    let overrides: [(&[&str], &str); 1] = [(&["model"], model)];
+    persist_overrides(codex_home, profile_override, &overrides).await
+}
+
+/// Persist the default `model` at the top level or active profile detected in
+/// `config.toml`.
+pub async fn set_default_model(codex_home: &Path, model: &str) -> anyhow::Result<()> {
+    set_default_model_for_profile(codex_home, None, model).await
+}
+
+/// Persist the default `model_reasoning_effort` to `CODEX_HOME/config.toml` so
+/// the selection is used across sessions. If a `profile` is set in
+/// `config.toml`, this updates the corresponding `[profiles.<name>]` table;
+/// otherwise it updates the top-level key.
+pub async fn set_default_effort_for_profile(
+    codex_home: &Path,
+    profile_override: Option<&str>,
     effort: ReasoningEffort,
 ) -> anyhow::Result<()> {
     let effort_str = effort.to_string();
-    let overrides: [(&[&str], &str); 2] = [
-        (&["model"], model),
-        (&["model_reasoning_effort"], effort_str.as_str()),
-    ];
+    let overrides: [(&[&str], &str); 1] = [(&["model_reasoning_effort"], effort_str.as_str())];
     persist_overrides(codex_home, profile_override, &overrides).await
+}
+
+/// Persist the default `model_reasoning_effort` at the top level or active
+/// profile detected in `config.toml`.
+pub async fn set_default_effort(codex_home: &Path, effort: ReasoningEffort) -> anyhow::Result<()> {
+    set_default_effort_for_profile(codex_home, None, effort).await
 }
 
 /// Persist overrides into `config.toml` using explicit key segments per
@@ -139,11 +148,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn set_default_model_top_level_when_no_profile() {
+    async fn set_default_model_and_effort_top_level_when_no_profile() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
-        set_default_model_and_effort(codex_home, "gpt-5", ReasoningEffort::High)
+        set_default_model(codex_home, "gpt-5")
+            .await
+            .expect("persist");
+        set_default_effort(codex_home, ReasoningEffort::High)
             .await
             .expect("persist");
 
@@ -155,7 +167,7 @@ model_reasoning_effort = "high"
     }
 
     #[tokio::test]
-    async fn set_default_model_updates_profile_when_profile_set() {
+    async fn set_defaults_update_profile_when_profile_set() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -163,7 +175,8 @@ model_reasoning_effort = "high"
         let seed = "profile = \"o3\"\n";
         fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
 
-        set_default_model_and_effort(codex_home, "o3", ReasoningEffort::Minimal)
+        set_default_model(codex_home, "o3").await.expect("persist");
+        set_default_effort(codex_home, ReasoningEffort::Minimal)
             .await
             .expect("persist");
 
@@ -178,7 +191,7 @@ model_reasoning_effort = "minimal"
     }
 
     #[tokio::test]
-    async fn set_default_model_updates_profile_with_dot_and_space() {
+    async fn set_defaults_update_profile_with_dot_and_space() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -186,7 +199,8 @@ model_reasoning_effort = "minimal"
         let seed = "profile = \"my.team name\"\n";
         fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
 
-        set_default_model_and_effort(codex_home, "o3", ReasoningEffort::Minimal)
+        set_default_model(codex_home, "o3").await.expect("persist");
+        set_default_effort(codex_home, ReasoningEffort::Minimal)
             .await
             .expect("persist");
 
@@ -201,7 +215,7 @@ model_reasoning_effort = "minimal"
     }
 
     #[tokio::test]
-    async fn set_default_model_updates_when_profile_override_supplied() {
+    async fn set_defaults_update_when_profile_override_supplied() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -209,14 +223,12 @@ model_reasoning_effort = "minimal"
         fs::write(codex_home.join(CONFIG_TOML_FILE), "").expect("seed write");
 
         // Persist with an explicit profile override
-        set_default_model_and_effort_for_profile(
-            codex_home,
-            Some("o3"),
-            "o3",
-            ReasoningEffort::High,
-        )
-        .await
-        .expect("persist");
+        set_default_model_for_profile(codex_home, Some("o3"), "o3")
+            .await
+            .expect("persist");
+        set_default_effort_for_profile(codex_home, Some("o3"), ReasoningEffort::High)
+            .await
+            .expect("persist");
 
         let contents = read_config(codex_home);
         let expected = r#"[profiles.o3]
@@ -274,7 +286,7 @@ baz = "ok"
     }
 
     #[tokio::test]
-    async fn set_default_model_preserves_comments() {
+    async fn set_defaults_preserve_comments() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -292,7 +304,8 @@ existing = "keep"
         fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
 
         // Apply defaults; since profile is set, it should write under [profiles.o3]
-        set_default_model_and_effort(codex_home, "o3", ReasoningEffort::High)
+        set_default_model(codex_home, "o3").await.expect("persist");
+        set_default_effort(codex_home, ReasoningEffort::High)
             .await
             .expect("persist");
 
@@ -313,7 +326,7 @@ model_reasoning_effort = "high"
     }
 
     #[tokio::test]
-    async fn set_default_model_preserves_global_comments() {
+    async fn set_defaults_preserve_global_comments() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -326,7 +339,10 @@ existing = "keep"
         fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
 
         // Since there is no profile, the defaults should be written at top-level
-        set_default_model_and_effort(codex_home, "gpt-5", ReasoningEffort::Minimal)
+        set_default_model(codex_home, "gpt-5")
+            .await
+            .expect("persist");
+        set_default_effort(codex_home, ReasoningEffort::Minimal)
             .await
             .expect("persist");
 
@@ -357,5 +373,95 @@ model_reasoning_effort = "minimal"
         // File should be unchanged
         let contents = read_config(codex_home);
         assert_eq!(contents, invalid);
+    }
+
+    #[tokio::test]
+    async fn changing_only_model_preserves_existing_effort_top_level() {
+        let tmpdir = tempdir().expect("tmp");
+        let codex_home = tmpdir.path();
+
+        // Seed with an effort value only
+        let seed = "model_reasoning_effort = \"minimal\"\n";
+        fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
+
+        // Change only the model
+        set_default_model(codex_home, "o3").await.expect("persist");
+
+        let contents = read_config(codex_home);
+        let expected = r#"model_reasoning_effort = "minimal"
+model = "o3"
+"#;
+        assert_eq!(contents, expected);
+    }
+
+    #[tokio::test]
+    async fn changing_only_effort_preserves_existing_model_top_level() {
+        let tmpdir = tempdir().expect("tmp");
+        let codex_home = tmpdir.path();
+
+        // Seed with a model value only
+        let seed = "model = \"gpt-5\"\n";
+        fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
+
+        // Change only the effort
+        set_default_effort(codex_home, ReasoningEffort::High)
+            .await
+            .expect("persist");
+
+        let contents = read_config(codex_home);
+        let expected = r#"model = "gpt-5"
+model_reasoning_effort = "high"
+"#;
+        assert_eq!(contents, expected);
+    }
+
+    #[tokio::test]
+    async fn changing_only_model_preserves_effort_in_active_profile() {
+        let tmpdir = tempdir().expect("tmp");
+        let codex_home = tmpdir.path();
+
+        // Seed with an active profile and an existing effort under that profile
+        let seed = r#"profile = "p1"
+
+[profiles.p1]
+model_reasoning_effort = "low"
+"#;
+        fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
+
+        set_default_model(codex_home, "o4-mini")
+            .await
+            .expect("persist");
+
+        let contents = read_config(codex_home);
+        let expected = r#"profile = "p1"
+
+[profiles.p1]
+model_reasoning_effort = "low"
+model = "o4-mini"
+"#;
+        assert_eq!(contents, expected);
+    }
+
+    #[tokio::test]
+    async fn changing_only_effort_preserves_model_in_profile_override() {
+        let tmpdir = tempdir().expect("tmp");
+        let codex_home = tmpdir.path();
+
+        // No active profile key; we'll target an explicit override
+        let seed = r#"[profiles.team]
+model = "gpt-5"
+"#;
+        fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
+
+        set_default_effort_for_profile(codex_home, Some("team"), ReasoningEffort::Minimal)
+            .await
+            .expect("persist");
+
+        let contents = read_config(codex_home);
+        let expected = r#"[profiles.team]
+model = "gpt-5"
+model_reasoning_effort = "minimal"
+"#;
+        assert_eq!(contents, expected);
     }
 }

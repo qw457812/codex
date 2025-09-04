@@ -42,7 +42,8 @@ use crate::client::ModelClient;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
 use crate::config::Config;
-use crate::config::set_default_model_and_effort_for_profile;
+use crate::config::set_default_effort_for_profile;
+use crate::config::set_default_model_for_profile;
 use crate::config_types::ShellEnvironmentPolicy;
 use crate::conversation_history::ConversationHistory;
 use crate::conversation_manager::InitialHistory;
@@ -1124,17 +1125,26 @@ async fn submission_loop(
                 // Install the new persistent context for subsequent tasks/turns.
                 turn_context = Arc::new(new_turn_context);
 
-                // Persist model and reasoning effort across sessions.
-                if (model.is_some() || effort.is_some())
-                    && let Err(e) = set_default_model_and_effort_for_profile(
+                // Persist model and/or reasoning effort across sessions.
+                if model.is_some()
+                    && let Err(e) = set_default_model_for_profile(
                         &config.codex_home,
                         config.active_profile.as_deref(),
                         &effective_model,
+                    )
+                    .await
+                {
+                    warn!("failed to persist default model: {e:#}");
+                }
+                if effort.is_some()
+                    && let Err(e) = set_default_effort_for_profile(
+                        &config.codex_home,
+                        config.active_profile.as_deref(),
                         effective_effort,
                     )
                     .await
                 {
-                    warn!("failed to persist default model and effort: {e:#}");
+                    warn!("failed to persist default effort: {e:#}");
                 }
 
                 if cwd.is_some() || approval_policy.is_some() || sandbox_policy.is_some() {
