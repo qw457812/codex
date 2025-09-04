@@ -1,5 +1,4 @@
 use crate::config::CONFIG_TOML_FILE;
-use crate::config::load_config_as_toml;
 use codex_protocol::config_types::ReasoningEffort;
 use std::path::Path;
 use tempfile::NamedTempFile;
@@ -10,18 +9,18 @@ use toml_edit::DocumentMut;
 ///
 /// If a `profile` is set in `config.toml`, this updates the corresponding
 /// `[profiles.<name>]` table; otherwise it updates the top-level keys.
-pub fn set_default_model_and_effort(
+pub async fn set_default_model_and_effort(
     codex_home: &Path,
     model: &str,
     effort: ReasoningEffort,
 ) -> anyhow::Result<()> {
-    set_default_model_and_effort_for_profile(codex_home, None, model, effort)
+    set_default_model_and_effort_for_profile(codex_home, None, model, effort).await
 }
 
 /// Persist defaults under the specified profile if provided; otherwise, if a
 /// `profile` is set in `config.toml`, use it; if neither is present, update
 /// the top-level keys.
-pub fn set_default_model_and_effort_for_profile(
+pub async fn set_default_model_and_effort_for_profile(
     codex_home: &Path,
     profile_override: Option<&str>,
     model: &str,
@@ -32,31 +31,31 @@ pub fn set_default_model_and_effort_for_profile(
         (&["model"], model),
         (&["model_reasoning_effort"], effort_str.as_str()),
     ];
-    persist_overrides(codex_home, profile_override, &overrides)
+    persist_overrides(codex_home, profile_override, &overrides).await
 }
 
 /// Persist overrides into `config.toml` using explicit key segments per
 /// override. This avoids ambiguity with keys that contain dots or spaces.
-fn persist_overrides(
+async fn persist_overrides(
     codex_home: &Path,
     profile: Option<&str>,
     overrides: &[(&[&str], &str)],
 ) -> anyhow::Result<()> {
     let config_path = codex_home.join(CONFIG_TOML_FILE);
 
-    let mut doc = match std::fs::read_to_string(&config_path) {
+    let mut doc = match tokio::fs::read_to_string(&config_path).await {
         Ok(s) => s.parse::<DocumentMut>()?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => DocumentMut::new(),
         Err(e) => return Err(e.into()),
     };
 
-    let effective_profile = profile.map(str::to_owned).or_else(|| {
-        load_config_as_toml(codex_home).ok().and_then(|v| {
-            v.get("profile")
-                .and_then(|i| i.as_str())
-                .map(|s| s.to_string())
-        })
-    });
+    let effective_profile = if let Some(p) = profile {
+        Some(p.to_owned())
+    } else {
+        doc.get("profile")
+            .and_then(|i| i.as_str())
+            .map(|s| s.to_string())
+    };
 
     for (segments, val) in overrides.iter().copied() {
         let value = toml_edit::value(val);
@@ -75,9 +74,9 @@ fn persist_overrides(
         }
     }
 
-    std::fs::create_dir_all(codex_home)?;
+    tokio::fs::create_dir_all(codex_home).await?;
     let tmp_file = NamedTempFile::new_in(codex_home)?;
-    std::fs::write(tmp_file.path(), doc.to_string())?;
+    tokio::fs::write(tmp_file.path(), doc.to_string()).await?;
     tmp_file.persist(config_path)?;
 
     Ok(())
@@ -139,12 +138,14 @@ mod tests {
         fs::read_to_string(p).unwrap_or_default()
     }
 
-    #[test]
-    fn set_default_model_top_level_when_no_profile() {
+    #[tokio::test]
+    async fn set_default_model_top_level_when_no_profile() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
-        set_default_model_and_effort(codex_home, "gpt-5", ReasoningEffort::High).expect("persist");
+        set_default_model_and_effort(codex_home, "gpt-5", ReasoningEffort::High)
+            .await
+            .expect("persist");
 
         let contents = read_config(codex_home);
         let expected = r#"model = "gpt-5"
@@ -153,8 +154,8 @@ model_reasoning_effort = "high"
         assert_eq!(contents, expected);
     }
 
-    #[test]
-    fn set_default_model_updates_profile_when_profile_set() {
+    #[tokio::test]
+    async fn set_default_model_updates_profile_when_profile_set() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -162,7 +163,9 @@ model_reasoning_effort = "high"
         let seed = "profile = \"o3\"\n";
         fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
 
-        set_default_model_and_effort(codex_home, "o3", ReasoningEffort::Minimal).expect("persist");
+        set_default_model_and_effort(codex_home, "o3", ReasoningEffort::Minimal)
+            .await
+            .expect("persist");
 
         let contents = read_config(codex_home);
         let expected = r#"profile = "o3"
@@ -174,8 +177,8 @@ model_reasoning_effort = "minimal"
         assert_eq!(contents, expected);
     }
 
-    #[test]
-    fn set_default_model_updates_profile_with_dot_and_space() {
+    #[tokio::test]
+    async fn set_default_model_updates_profile_with_dot_and_space() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -183,7 +186,9 @@ model_reasoning_effort = "minimal"
         let seed = "profile = \"my.team name\"\n";
         fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
 
-        set_default_model_and_effort(codex_home, "o3", ReasoningEffort::Minimal).expect("persist");
+        set_default_model_and_effort(codex_home, "o3", ReasoningEffort::Minimal)
+            .await
+            .expect("persist");
 
         let contents = read_config(codex_home);
         let expected = r#"profile = "my.team name"
@@ -195,8 +200,8 @@ model_reasoning_effort = "minimal"
         assert_eq!(contents, expected);
     }
 
-    #[test]
-    fn set_default_model_updates_when_profile_override_supplied() {
+    #[tokio::test]
+    async fn set_default_model_updates_when_profile_override_supplied() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -210,6 +215,7 @@ model_reasoning_effort = "minimal"
             "o3",
             ReasoningEffort::High,
         )
+        .await
         .expect("persist");
 
         let contents = read_config(codex_home);
@@ -220,8 +226,8 @@ model_reasoning_effort = "high"
         assert_eq!(contents, expected);
     }
 
-    #[test]
-    fn persist_overrides_creates_nested_tables() {
+    #[tokio::test]
+    async fn persist_overrides_creates_nested_tables() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -234,6 +240,7 @@ model_reasoning_effort = "high"
                 (&["profiles", "p1", "model"], "gpt-5"),
             ],
         )
+        .await
         .expect("persist");
 
         let contents = read_config(codex_home);
@@ -248,14 +255,16 @@ model = "gpt-5"
         assert_eq!(contents, expected);
     }
 
-    #[test]
-    fn persist_overrides_replaces_scalar_with_table() {
+    #[tokio::test]
+    async fn persist_overrides_replaces_scalar_with_table() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
         let seed = "foo = \"bar\"\n";
         fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
 
-        persist_overrides(codex_home, None, &[(&["foo", "bar", "baz"], "ok")]).expect("persist");
+        persist_overrides(codex_home, None, &[(&["foo", "bar", "baz"], "ok")])
+            .await
+            .expect("persist");
 
         let contents = read_config(codex_home);
         let expected = r#"[foo.bar]
@@ -264,8 +273,8 @@ baz = "ok"
         assert_eq!(contents, expected);
     }
 
-    #[test]
-    fn set_default_model_preserves_comments() {
+    #[tokio::test]
+    async fn set_default_model_preserves_comments() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -283,7 +292,9 @@ existing = "keep"
         fs::write(codex_home.join(CONFIG_TOML_FILE), seed).expect("seed write");
 
         // Apply defaults; since profile is set, it should write under [profiles.o3]
-        set_default_model_and_effort(codex_home, "o3", ReasoningEffort::High).expect("persist");
+        set_default_model_and_effort(codex_home, "o3", ReasoningEffort::High)
+            .await
+            .expect("persist");
 
         let contents = read_config(codex_home);
         let expected = r#"# Global comment
@@ -301,8 +312,8 @@ model_reasoning_effort = "high"
         assert_eq!(contents, expected);
     }
 
-    #[test]
-    fn set_default_model_preserves_global_comments() {
+    #[tokio::test]
+    async fn set_default_model_preserves_global_comments() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -316,6 +327,7 @@ existing = "keep"
 
         // Since there is no profile, the defaults should be written at top-level
         set_default_model_and_effort(codex_home, "gpt-5", ReasoningEffort::Minimal)
+            .await
             .expect("persist");
 
         let contents = read_config(codex_home);
@@ -329,8 +341,8 @@ model_reasoning_effort = "minimal"
         assert_eq!(contents, expected);
     }
 
-    #[test]
-    fn persist_overrides_errors_on_parse_failure() {
+    #[tokio::test]
+    async fn persist_overrides_errors_on_parse_failure() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
 
@@ -339,7 +351,7 @@ model_reasoning_effort = "minimal"
         fs::write(codex_home.join(CONFIG_TOML_FILE), invalid).expect("seed write");
 
         // Attempting to persist should return an error and must not clobber the file.
-        let res = persist_overrides(codex_home, None, &[(&["x"], "y")]);
+        let res = persist_overrides(codex_home, None, &[(&["x"], "y")]).await;
         assert!(res.is_err(), "expected parse error to propagate");
 
         // File should be unchanged

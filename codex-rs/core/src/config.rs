@@ -1397,6 +1397,7 @@ model_verbosity = "high"
             preferred_auth_method: AuthMode::ChatGPT,
             use_experimental_streamable_shell_tool: false,
             include_view_image_tool: true,
+            active_profile: Some("gpt5".to_string()),
             disable_paste_burst: false,
             use_experimental_reasoning_summary: false,
         };

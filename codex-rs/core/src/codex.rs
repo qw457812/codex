@@ -1125,13 +1125,16 @@ async fn submission_loop(
                 turn_context = Arc::new(new_turn_context);
 
                 // Persist model and reasoning effort across sessions.
-                if model.is_some() || effort.is_some() {
-                    let _ = set_default_model_and_effort_for_profile(
+                if (model.is_some() || effort.is_some())
+                    && let Err(e) = set_default_model_and_effort_for_profile(
                         &config.codex_home,
                         config.active_profile.as_deref(),
                         &effective_model,
                         effective_effort,
-                    );
+                    )
+                    .await
+                {
+                    warn!("failed to persist default model and effort: {e:#}");
                 }
 
                 if cwd.is_some() || approval_policy.is_some() || sandbox_policy.is_some() {
