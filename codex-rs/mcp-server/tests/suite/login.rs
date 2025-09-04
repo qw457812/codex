@@ -64,15 +64,13 @@ async fn login_with_api_key_via_request(mcp: &mut McpProcess, api_key: &str) {
         ),
         "loginApiKey response",
     );
-    let _: LoginApiKeyResponse =
-        unwrap_result(to_response(resp), "deserialize login response");
+    let _: LoginApiKeyResponse = unwrap_result(to_response(resp), "deserialize login response");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn logout_chatgpt_removes_auth() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
-    create_config_toml(codex_home.path())
-        .unwrap_or_else(|err| panic!("write config.toml: {err}"));
+    create_config_toml(codex_home.path()).unwrap_or_else(|err| panic!("write config.toml: {err}"));
 
     let mut mcp = unwrap_result(
         McpProcess::new(codex_home.path()).await,
@@ -141,8 +139,7 @@ async fn logout_chatgpt_removes_auth() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn login_and_cancel_chatgpt() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
-    create_config_toml(codex_home.path())
-        .unwrap_or_else(|err| panic!("write config.toml: {err}"));
+    create_config_toml(codex_home.path()).unwrap_or_else(|err| panic!("write config.toml: {err}"));
 
     let mut mcp = unwrap_result(
         McpProcess::new(codex_home.path()).await,
@@ -156,10 +153,7 @@ async fn login_and_cancel_chatgpt() {
         "init failed",
     );
 
-    let login_id = unwrap_result(
-        mcp.send_login_chat_gpt_request().await,
-        "send loginChatGpt",
-    );
+    let login_id = unwrap_result(mcp.send_login_chat_gpt_request().await, "send loginChatGpt");
     let login_resp: JSONRPCResponse = unwrap_result(
         unwrap_result(
             timeout(
