@@ -229,15 +229,14 @@ impl McpConnectionManager {
         arguments: Option<serde_json::Value>,
         timeout: Option<Duration>,
     ) -> Result<mcp_types::CallToolResult> {
-        let managed_client = self
+        let client = self
             .clients
             .get(server)
             .ok_or_else(|| anyhow!("unknown MCP server '{server}'"))?
             .client
             .clone();
 
-        managed_client
-            .client
+        client
             .call_tool(tool.to_string(), arguments, timeout)
             .await
             .with_context(|| format!("tool call failed for `{server}/{tool}`"))
