@@ -554,9 +554,6 @@ impl Session {
         }
 
         let mut msgs = Vec::new();
-        // This is to support replaying UI history for sessions that were created before the session resumption was added.
-        // In the future, we should remove this support and require all sessions to be created with session resumption.
-        let before_resume_session = !matches!(items[0], RolloutItem::SessionMeta(..));
         for item in items {
             match item {
                 RolloutItem::ResponseItem(response) => {
@@ -564,17 +561,12 @@ impl Session {
                         &response,
                         self.show_raw_agent_reasoning,
                     );
-                    if before_resume_session {
-                        // Before resume: include everything
-                        msgs.extend(new_msgs);
-                    } else {
-                        // After resume: include only user messages
-                        msgs.extend(
-                            new_msgs
-                                .into_iter()
-                                .filter(|m| matches!(m, EventMsg::UserMessage(_))),
-                        );
-                    }
+                    // After resume: include only user messages
+                    msgs.extend(
+                        new_msgs
+                            .into_iter()
+                            .filter(|m| matches!(m, EventMsg::UserMessage(_))),
+                    );
                 }
                 RolloutItem::Event(event) => msgs.push(event.msg.clone()),
                 RolloutItem::SessionMeta(..) => {
