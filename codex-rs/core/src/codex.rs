@@ -552,6 +552,8 @@ impl Session {
         }
 
         let mut msgs = Vec::new();
+        // This is to support replaying UI history for sessions that were created before the session resumption was added.
+        // In the future, we should remove this support and require all sessions to be created with session resumption.
         let before_resume_session = !matches!(items[0], RolloutItem::SessionMeta(..));
         for item in items {
             match item {
