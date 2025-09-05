@@ -588,7 +588,7 @@ Options that are specific to the TUI.
 | `mcp_servers.<id>.command` | string | MCP server launcher command. |
 | `mcp_servers.<id>.args` | array<string> | MCP server args. |
 | `mcp_servers.<id>.env` | map<string,string> | MCP server env vars. |
-| `mcp_servers.<id>.timeout_ms` | number | Startup timeout in milliseconds (default: 10000). |
+| `mcp_servers.<id>.startup_timeout_ms` | number | Startup timeout in milliseconds (default: 10000). Timeout is applied both for initializing MCP server and initially listing tools. |
 | `model_providers.<id>.name` | string | Display name. |
 | `model_providers.<id>.base_url` | string | API base URL. |
 | `model_providers.<id>.env_key` | string | Env var for API key. |

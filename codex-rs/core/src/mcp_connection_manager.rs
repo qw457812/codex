@@ -37,8 +37,8 @@ use crate::config_types::McpServerConfig;
 const MCP_TOOL_NAME_DELIMITER: &str = "__";
 const MAX_TOOL_NAME_LENGTH: usize = 64;
 
-/// Default timeout for interacting with MCP servers.
-const DEFAULT_MCP_SERVER_TIMEOUT: Duration = Duration::from_secs(10);
+/// Default timeout for initializing MCP server
+const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Map that holds a startup error for every MCP server that could **not** be
 /// spawned successfully.
@@ -84,7 +84,7 @@ struct ToolInfo {
 
 struct ManagedClient {
     client: Arc<McpClient>,
-    timeout: Duration,
+    startup_timeout: Duration,
 }
 
 /// A thin wrapper around a set of running [`McpClient`] instances.
@@ -132,10 +132,10 @@ impl McpConnectionManager {
                 continue;
             }
 
-            let timeout = cfg
-                .timeout_ms
+            let startup_timeout = cfg
+                .startup_timeout_ms
                 .map(Duration::from_millis)
-                .unwrap_or(DEFAULT_MCP_SERVER_TIMEOUT);
+                .unwrap_or(DEFAULT_STARTUP_TIMEOUT);
 
             join_set.spawn(async move {
                 let McpServerConfig {
@@ -168,10 +168,14 @@ impl McpConnectionManager {
                         };
                         let initialize_notification_params = None;
                         match client
-                            .initialize(params, initialize_notification_params, Some(timeout))
+                            .initialize(
+                                params,
+                                initialize_notification_params,
+                                Some(startup_timeout),
+                            )
                             .await
                         {
-                            Ok(_response) => (server_name, Ok((client, timeout))),
+                            Ok(_response) => (server_name, Ok((client, startup_timeout))),
                             Err(e) => (server_name, Err(e)),
                         }
                     }
@@ -186,12 +190,12 @@ impl McpConnectionManager {
             let (server_name, client_res) = res?; // JoinError propagation
 
             match client_res {
-                Ok((client, timeout)) => {
+                Ok((client, startup_timeout)) => {
                     clients.insert(
                         server_name,
                         ManagedClient {
                             client: Arc::new(client),
-                            timeout,
+                            startup_timeout,
                         },
                     );
                 }

@@ -19,9 +19,9 @@ pub struct McpServerConfig {
     #[serde(default)]
     pub env: Option<HashMap<String, String>>,
 
-    /// Timeout in milliseconds for starting the server and listing tools.
+    /// Startup timeout in milliseconds for initializing MCP server & initialially listing tools
     #[serde(default)]
-    pub timeout_ms: Option<u64>,
+    pub startup_timeout_ms: Option<u64>,
 }
 
 #[derive(Deserialize, Debug, Copy, Clone, PartialEq)]
