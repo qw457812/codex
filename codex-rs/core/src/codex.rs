@@ -547,14 +547,8 @@ impl Session {
     }
 
     async fn record_initial_history_resumed(&self, items: Vec<RolloutItem>) -> Vec<EventMsg> {
-        let mut responses: Vec<ResponseItem> = Vec::new();
         for item in items.clone() {
-            if let RolloutItem::ResponseItem(v) = item {
-                responses.extend(v);
-            }
-        }
-        if !responses.is_empty() {
-            self.record_conversation_items(&responses).await;
+            self.record_conversation_items(item).await;
         }
 
         let mut msgs = Vec::new();
