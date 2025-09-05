@@ -2,10 +2,10 @@
 
 ## Usage-based billing alternative: Use an OpenAI API key
 
-If you prefer to pay-as-you-go, you can still authenticate with your OpenAI API key by setting it as an environment variable:
+If you prefer to pay-as-you-go, you can still authenticate with your OpenAI API key:
 
 ```shell
-export OPENAI_API_KEY="your-api-key-here"
+codex login --api-key "your-api-key-here"
 ```
 
 This key must, at minimum, have write access to the Responses API.

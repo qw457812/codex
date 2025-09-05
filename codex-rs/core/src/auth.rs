@@ -228,7 +228,6 @@ pub fn login_with_api_key(codex_home: &Path, api_key: &str) -> std::io::Result<(
 }
 
 fn load_auth(codex_home: &Path, originator: &str) -> std::io::Result<Option<CodexAuth>> {
-    // Check to see if there is a valid auth.json file.
     let auth_file = get_auth_file(codex_home);
     let client = crate::default_client::create_client(originator);
     let auth_dot_json = match try_read_auth_json(&auth_file) {
