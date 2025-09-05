@@ -257,7 +257,7 @@ async fn list_all_tools(clients: &HashMap<String, ManagedClient>) -> Result<Vec<
     // Spawn one task per server so we can query them concurrently. This
     // keeps the overall latency roughly at the slowest server instead of
     // the cumulative latency.
-    for (server_name, managed_client) in clients.iter() {
+    for (server_name, managed_client) in clients {
         let server_name_cloned = server_name.clone();
         let client_clone = managed_client.client.clone();
         let startup_timeout = managed_client.startup_timeout;
