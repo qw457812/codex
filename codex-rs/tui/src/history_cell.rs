@@ -2,8 +2,14 @@ use crate::diff_render::create_diff_summary;
 use crate::exec_command::relativize_to_home;
 use crate::exec_command::strip_bash_lc_and_escape;
 use crate::markdown::append_markdown;
+use crate::render::line_utils::line_to_static;
+use crate::render::line_utils::prefix_lines;
+use crate::render::line_utils::push_owned_lines;
 use crate::slash_command::SlashCommand;
 use crate::text_formatting::format_and_truncate_tool_result;
+use crate::wrapping::RtOptions;
+use crate::wrapping::word_wrap_line;
+use crate::wrapping::word_wrap_lines;
 use base64::Engine;
 use codex_ansi_escape::ansi_escape_line;
 use codex_common::create_config_summary_entries;
@@ -11,6 +17,7 @@ use codex_common::elapsed::format_duration;
 use codex_core::auth::get_auth_file;
 use codex_core::auth::try_read_auth_json;
 use codex_core::config::Config;
+use codex_core::config_types::ReasoningSummaryFormat;
 use codex_core::plan_tool::PlanItemArg;
 use codex_core::plan_tool::StepStatus;
 use codex_core::plan_tool::UpdatePlanArgs;
@@ -95,8 +102,7 @@ impl HistoryCell for UserHistoryCell {
         let wrapped = textwrap::wrap(
             &self.message,
             textwrap::Options::new(wrap_width as usize)
-                .wrap_algorithm(textwrap::WrapAlgorithm::FirstFit) // Match textarea wrap
-                .word_splitter(textwrap::WordSplitter::NoHyphenation),
+                .wrap_algorithm(textwrap::WrapAlgorithm::FirstFit), // Match textarea wrap
         );
 
         for line in wrapped {
@@ -130,28 +136,16 @@ impl AgentMessageCell {
 
 impl HistoryCell for AgentMessageCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        let mut out: Vec<Line<'static>> = Vec::new();
-        // We want:
-        // - First visual line: "> " prefix (collapse with header logic)
-        // - All subsequent visual lines: two-space prefix
-        let mut is_first_visual = true;
-        let wrap_width = width.saturating_sub(2); // account for prefix
-        for line in &self.lines {
-            let wrapped =
-                crate::insert_history::word_wrap_lines(std::slice::from_ref(line), wrap_width);
-            for (i, piece) in wrapped.into_iter().enumerate() {
-                let mut spans = Vec::with_capacity(piece.spans.len() + 1);
-                spans.push(if is_first_visual && i == 0 && self.is_first_line {
+        word_wrap_lines(
+            &self.lines,
+            RtOptions::new(width as usize)
+                .initial_indent(if self.is_first_line {
                     "> ".into()
                 } else {
                     "  ".into()
-                });
-                spans.extend(piece.spans.into_iter());
-                out.push(spans.into());
-            }
-            is_first_visual = false;
-        }
-        out
+                })
+                .subsequent_indent("  ".into()),
+        )
     }
 
     fn transcript_lines(&self) -> Vec<Line<'static>> {
@@ -276,13 +270,13 @@ impl ExecCell {
     }
 
     fn exploring_display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        let mut lines: Vec<Line<'static>> = Vec::new();
+        let mut out: Vec<Line<'static>> = Vec::new();
         let active_start_time = self
             .calls
             .iter()
             .find(|c| c.output.is_none())
             .and_then(|c| c.start_time);
-        lines.push(Line::from(vec![
+        out.push(Line::from(vec![
             if self.is_active() {
                 // Show an animated spinner while exploring
                 spinner(active_start_time)
@@ -297,7 +291,7 @@ impl ExecCell {
             },
         ]));
         let mut calls = self.calls.clone();
-        let mut first = true;
+        let mut out_indented = Vec::new();
         while !calls.is_empty() {
             let mut call = calls.remove(0);
             if call
@@ -370,39 +364,24 @@ impl ExecCell {
                 lines
             };
             for (title, line) in call_lines {
-                let prefix_len = 4 + title.len() + 1; // "  └ " + title + " "
-                let wrapped = crate::insert_history::word_wrap_lines(
-                    &[line.into()],
-                    width.saturating_sub(prefix_len as u16),
+                let line = Line::from(line);
+                let initial_indent = Line::from(vec![title.cyan(), " ".into()]);
+                let subsequent_indent = " ".repeat(initial_indent.width()).into();
+                let wrapped = word_wrap_line(
+                    &line,
+                    RtOptions::new(width as usize)
+                        .initial_indent(initial_indent)
+                        .subsequent_indent(subsequent_indent),
                 );
-                let mut first_sub = true;
-                for mut line in wrapped {
-                    let mut spans = Vec::with_capacity(line.spans.len() + 1);
-                    spans.push(if first {
-                        first = false;
-                        "  └ ".dim()
-                    } else {
-                        "    ".into()
-                    });
-                    if first_sub {
-                        first_sub = false;
-                        spans.push(title.cyan());
-                        spans.push(" ".into());
-                    } else {
-                        spans.push(" ".repeat(title.width() + 1).into());
-                    }
-                    spans.extend(line.spans.into_iter());
-                    line.spans = spans;
-                    lines.push(line);
-                }
+                push_owned_lines(&wrapped, &mut out_indented);
             }
         }
-        lines
+        out.extend(prefix_lines(out_indented, "  └ ".dim(), "    ".into()));
+        out
     }
 
     fn command_display_lines(&self, width: u16) -> Vec<Line<'static>> {
         use textwrap::Options as TwOptions;
-        use textwrap::WordSplitter;
 
         let mut lines: Vec<Line<'static>> = Vec::new();
         let [call] = &self.calls.as_slice() else {
@@ -422,38 +401,28 @@ impl ExecCell {
         // "• Running " (including trailing space) as the reserved prefix width.
         // If the command contains newlines, always use the multi-line variant.
         let reserved = "• Running ".width();
-        let mut branch_consumed = false;
 
-        if !cmd_display.contains('\n')
-            && cmd_display.width() < (width as usize).saturating_sub(reserved)
+        let mut body_lines: Vec<Line<'static>> = Vec::new();
+
+        let highlighted_lines = crate::render::highlight::highlight_bash_to_lines(&cmd_display);
+
+        if highlighted_lines.len() == 1
+            && highlighted_lines[0].width() < (width as usize).saturating_sub(reserved)
         {
-            lines.push(Line::from(vec![
-                bullet,
-                " ".into(),
-                title.bold(),
-                " ".into(),
-                cmd_display.clone().into(),
-            ]));
+            let mut line = Line::from(vec![bullet, " ".into(), title.bold(), " ".into()]);
+            line.extend(highlighted_lines[0].clone());
+            lines.push(line);
         } else {
-            branch_consumed = true;
             lines.push(vec![bullet, " ".into(), title.bold()].into());
 
-            // Wrap the command line.
-            for (i, line) in cmd_display.lines().enumerate() {
-                let wrapped = textwrap::wrap(
-                    line,
-                    TwOptions::new(width as usize)
-                        .initial_indent("    ")
-                        .subsequent_indent("        ")
-                        .word_splitter(WordSplitter::NoHyphenation),
-                );
-                lines.extend(wrapped.into_iter().enumerate().map(|(j, l)| {
-                    if i == 0 && j == 0 {
-                        vec!["  └ ".dim(), l[4..].to_string().into()].into()
-                    } else {
-                        l.to_string().into()
-                    }
-                }));
+            for hl_line in highlighted_lines.iter() {
+                let opts = crate::wrapping::RtOptions::new((width as usize).saturating_sub(4))
+                    .initial_indent("".into())
+                    .subsequent_indent("    ".into())
+                    // Hyphenation likes to break words on hyphens, which is bad for bash scripts --because-of-flags.
+                    .word_splitter(textwrap::WordSplitter::NoHyphenation);
+                let wrapped_borrowed = crate::wrapping::word_wrap_line(hl_line, opts);
+                body_lines.extend(wrapped_borrowed.iter().map(|l| line_to_static(l)));
             }
         }
         if let Some(output) = call.output.as_ref()
@@ -464,25 +433,13 @@ impl ExecCell {
                 .join("\n");
             if !out.trim().is_empty() {
                 // Wrap the output.
-                for (i, line) in out.lines().enumerate() {
-                    let wrapped = textwrap::wrap(
-                        line,
-                        TwOptions::new(width as usize - 4)
-                            .word_splitter(WordSplitter::NoHyphenation),
-                    );
-                    lines.extend(wrapped.into_iter().map(|l| {
-                        Line::from(vec![
-                            if i == 0 && !branch_consumed {
-                                "  └ ".dim()
-                            } else {
-                                "    ".dim()
-                            },
-                            l.to_string().dim(),
-                        ])
-                    }));
+                for line in out.lines() {
+                    let wrapped = textwrap::wrap(line, TwOptions::new(width as usize - 4));
+                    body_lines.extend(wrapped.into_iter().map(|l| Line::from(l.to_string().dim())));
                 }
             }
         }
+        lines.extend(prefix_lines(body_lines, "  └ ".dim(), "    ".into()));
         lines
     }
 }
@@ -1139,32 +1096,8 @@ impl HistoryCell for PlanUpdateCell {
                 .into_iter()
                 .map(|s| s.to_string().set_style(step_style).into())
                 .collect();
-            prefix_lines(step_text, &box_str.into(), &"  ".into())
+            prefix_lines(step_text, box_str.into(), "  ".into())
         };
-
-        fn prefix_lines(
-            lines: Vec<Line<'static>>,
-            initial_prefix: &Span<'static>,
-            subsequent_prefix: &Span<'static>,
-        ) -> Vec<Line<'static>> {
-            lines
-                .into_iter()
-                .enumerate()
-                .map(|(i, l)| {
-                    Line::from(
-                        [
-                            vec![if i == 0 {
-                                initial_prefix.clone()
-                            } else {
-                                subsequent_prefix.clone()
-                            }],
-                            l.spans,
-                        ]
-                        .concat(),
-                    )
-                })
-                .collect()
-        }
 
         let mut lines: Vec<Line<'static>> = vec![];
         lines.push(vec!["• ".into(), "Updated Plan".bold()].into());
@@ -1186,7 +1119,7 @@ impl HistoryCell for PlanUpdateCell {
                 indented_lines.extend(render_step(status, step));
             }
         }
-        lines.extend(prefix_lines(indented_lines, &"  └ ".into(), &"    ".into()));
+        lines.extend(prefix_lines(indented_lines, "  └ ".into(), "    ".into()));
 
         lines
     }
@@ -1230,6 +1163,26 @@ pub(crate) fn new_patch_apply_failure(stderr: String) -> PlainHistoryCell {
     PlainHistoryCell { lines }
 }
 
+/// Create a new history cell for a proposed command approval.
+/// Renders a header and the command preview similar to how proposed patches
+/// show a header and summary.
+pub(crate) fn new_proposed_command(command: &[String]) -> PlainHistoryCell {
+    let cmd = strip_bash_lc_and_escape(command);
+
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    lines.push(Line::from(vec!["• ".into(), "Proposed Command".bold()]));
+
+    let cmd_lines: Vec<Line<'static>> = cmd
+        .lines()
+        .map(|part| Line::from(part.to_string()))
+        .collect();
+    let initial_prefix: Span<'static> = "  └ ".dim();
+    let subsequent_prefix: Span<'static> = "    ".into();
+    lines.extend(prefix_lines(cmd_lines, initial_prefix, subsequent_prefix));
+
+    PlainHistoryCell { lines }
+}
+
 pub(crate) fn new_reasoning_block(
     full_reasoning_buffer: String,
     config: &Config,
@@ -1244,7 +1197,7 @@ pub(crate) fn new_reasoning_summary_block(
     full_reasoning_buffer: String,
     config: &Config,
 ) -> Vec<Box<dyn HistoryCell>> {
-    if config.use_experimental_reasoning_summary {
+    if config.model_family.reasoning_summary_format == ReasoningSummaryFormat::Experimental {
         // Experimental format is following:
         // ** header **
         //
@@ -1856,7 +1809,7 @@ mod tests {
     #[test]
     fn reasoning_summary_block_returns_reasoning_cell_when_feature_disabled() {
         let mut config = test_config();
-        config.use_experimental_reasoning_summary = false;
+        config.model_family.reasoning_summary_format = ReasoningSummaryFormat::Experimental;
 
         let cells =
             new_reasoning_summary_block("Detailed reasoning goes here.".to_string(), &config);
@@ -1869,7 +1822,7 @@ mod tests {
     #[test]
     fn reasoning_summary_block_falls_back_when_header_is_missing() {
         let mut config = test_config();
-        config.use_experimental_reasoning_summary = true;
+        config.model_family.reasoning_summary_format = ReasoningSummaryFormat::Experimental;
 
         let cells = new_reasoning_summary_block(
             "**High level reasoning without closing".to_string(),
@@ -1887,7 +1840,7 @@ mod tests {
     #[test]
     fn reasoning_summary_block_falls_back_when_summary_is_missing() {
         let mut config = test_config();
-        config.use_experimental_reasoning_summary = true;
+        config.model_family.reasoning_summary_format = ReasoningSummaryFormat::Experimental;
 
         let cells = new_reasoning_summary_block(
             "**High level reasoning without closing**".to_string(),
@@ -1917,7 +1870,7 @@ mod tests {
     #[test]
     fn reasoning_summary_block_splits_header_and_summary_when_present() {
         let mut config = test_config();
-        config.use_experimental_reasoning_summary = true;
+        config.model_family.reasoning_summary_format = ReasoningSummaryFormat::Experimental;
 
         let cells = new_reasoning_summary_block(
             "**High level plan**\n\nWe should fix the bug next.".to_string(),
