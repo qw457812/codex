@@ -172,15 +172,7 @@ impl McpConnectionManager {
                             .await
                         {
                             Ok(_response) => (server_name, Ok((client, timeout))),
-                            Err(e) => {
-                                let (stdout, stderr) = client.output_snippet().await;
-                                let err = anyhow!(
-                                    "initialize failed: {e}\nstdout:\n{}\nstderr:\n{}",
-                                    stdout.join("\n"),
-                                    stderr.join("\n")
-                                );
-                                (server_name, Err(err))
-                            }
+                            Err(e) => (server_name, Err(e)),
                         }
                     }
                     Err(e) => (server_name, Err(e.into())),
