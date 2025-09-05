@@ -37,7 +37,7 @@ use crate::config_types::McpServerConfig;
 const MCP_TOOL_NAME_DELIMITER: &str = "__";
 const MAX_TOOL_NAME_LENGTH: usize = 64;
 
-/// Default timeout for initializing MCP server
+/// Default timeout for initializing MCP server & initially listing tools
 const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Map that holds a startup error for every MCP server that could **not** be
@@ -205,8 +205,7 @@ impl McpConnectionManager {
             }
         }
 
-        let (all_tools, list_errors) = list_all_tools(&mut clients).await?;
-        errors.extend(list_errors);
+        let all_tools = list_all_tools(&clients).await?;
 
         let tools = qualify_tools(all_tools);
 
@@ -230,12 +229,14 @@ impl McpConnectionManager {
         arguments: Option<serde_json::Value>,
         timeout: Option<Duration>,
     ) -> Result<mcp_types::CallToolResult> {
-        let client = self
+        let managed_client = self
             .clients
             .get(server)
-            .ok_or_else(|| anyhow!("unknown MCP server '{server}'"))?;
+            .ok_or_else(|| anyhow!("unknown MCP server '{server}'"))?
+            .client
+            .clone();
 
-        client
+        managed_client
             .client
             .call_tool(tool.to_string(), arguments, timeout)
             .await
@@ -251,7 +252,7 @@ impl McpConnectionManager {
 
 /// Query every server for its available tools and return a single map that
 /// contains **all** tools. Each key is the fully-qualified name for the tool.
-async fn list_all_tools(clients: &mut HashMap<String, ManagedClient>) -> Result<Vec<ToolInfo>> {
+async fn list_all_tools(clients: &HashMap<String, ManagedClient>) -> Result<Vec<ToolInfo>> {
     let mut join_set = JoinSet::new();
 
     // Spawn one task per server so we can query them concurrently. This
