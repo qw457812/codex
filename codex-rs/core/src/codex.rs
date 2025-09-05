@@ -552,17 +552,32 @@ impl Session {
         }
 
         let mut msgs = Vec::new();
+        let before_resume_session = !matches!(items[0], RolloutItem::SessionMeta(..));
         for item in items {
             match item {
-                RolloutItem::ResponseItem(responses) => msgs.extend(
-                    responses
+                RolloutItem::ResponseItem(responses) => {
+                    let new_msgs: Vec<EventMsg> = responses
                         .iter()
                         .flat_map(|ri| {
                             map_response_item_to_event_messages(ri, self.show_raw_agent_reasoning)
                         })
-                        .filter(|m| matches!(m, EventMsg::UserMessage(_))),
-                ),
+                        .collect();
+                    if before_resume_session {
+                        // Before resume: include everything
+                        msgs.extend(new_msgs);
+                    } else {
+                        // After resume: include only user messages
+                        msgs.extend(
+                            new_msgs
+                                .into_iter()
+                                .filter(|m| matches!(m, EventMsg::UserMessage(_))),
+                        );
+                    }
+                }
                 RolloutItem::Event(events) => msgs.extend(events.iter().map(|e| e.msg.clone())),
+                RolloutItem::SessionMeta(..) => {
+                    // Session meta does not emit events
+                }
             }
         }
         msgs
