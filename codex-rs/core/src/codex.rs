@@ -16,7 +16,7 @@ use async_channel::Sender;
 use codex_apply_patch::ApplyPatchAction;
 use codex_apply_patch::MaybeApplyPatchVerified;
 use codex_apply_patch::maybe_parse_apply_patch_verified;
-use codex_protocol::protocol::ConversationHistoryResponseEvent;
+use codex_protocol::protocol::ConversationPathResponseEvent;
 use codex_protocol::protocol::TaskStartedEvent;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::TurnAbortedEvent;
@@ -542,7 +542,9 @@ impl Session {
             Some(turn_context.sandbox_policy.clone()),
             Some(self.user_shell.clone()),
         )));
-        self.record_conversation_items(&conversation_items).await;
+        for item in conversation_items {
+            self.record_conversation_items(item).await;
+        }
         vec![]
     }
 
@@ -557,13 +559,11 @@ impl Session {
         let before_resume_session = !matches!(items[0], RolloutItem::SessionMeta(..));
         for item in items {
             match item {
-                RolloutItem::ResponseItem(responses) => {
-                    let new_msgs: Vec<EventMsg> = responses
-                        .iter()
-                        .flat_map(|ri| {
-                            map_response_item_to_event_messages(ri, self.show_raw_agent_reasoning)
-                        })
-                        .collect();
+                RolloutItem::ResponseItem(response) => {
+                    let new_msgs: Vec<EventMsg> = map_response_item_to_event_messages(
+                        &response,
+                        self.show_raw_agent_reasoning,
+                    );
                     if before_resume_session {
                         // Before resume: include everything
                         msgs.extend(new_msgs);
@@ -576,7 +576,7 @@ impl Session {
                         );
                     }
                 }
-                RolloutItem::Event(events) => msgs.extend(events.iter().map(|e| e.msg.clone())),
+                RolloutItem::Event(event) => msgs.push(event.msg.clone()),
                 RolloutItem::SessionMeta(..) => {
                     // Session meta does not emit events
                 }
@@ -598,7 +598,7 @@ impl Session {
         };
         if let Some(rec) = recorder
             && let Err(e) = rec
-                .record_items(crate::rollout::RolloutItem::Event(vec![event_to_record]))
+                .record_items(crate::rollout::RolloutItem::Event(event_to_record))
                 .await
         {
             error!("failed to record rollout event: {e:#}");
@@ -698,11 +698,11 @@ impl Session {
         let item: RolloutItem = item.into();
         debug!("Recording items for conversation: {item:?}");
         self.record_state_snapshot(item.clone()).await;
-        if let RolloutItem::ResponseItem(response_items) = &item {
+        if let RolloutItem::ResponseItem(response_item) = &item {
             self.state
                 .lock_unchecked()
                 .history
-                .record_items(response_items);
+                .record_items(std::slice::from_ref(response_item));
         }
     }
 
@@ -1155,13 +1155,13 @@ async fn submission_loop(
                 // Install the new persistent context for subsequent tasks/turns.
                 turn_context = Arc::new(new_turn_context);
                 if cwd.is_some() || approval_policy.is_some() || sandbox_policy.is_some() {
-                    sess.record_conversation_items(&[ResponseItem::from(EnvironmentContext::new(
+                    sess.record_conversation_items(ResponseItem::from(EnvironmentContext::new(
                         cwd,
                         approval_policy,
                         sandbox_policy,
                         // Shell is not configurable from turn to turn
                         None,
-                    ))])
+                    )))
                     .await;
                 }
             }
@@ -1371,14 +1371,19 @@ async fn submission_loop(
                 sess.send_event(event).await;
                 break;
             }
-            Op::GetHistory => {
+            Op::GetConversationPath => {
                 let sub_id = sub.id.clone();
 
                 let event = Event {
                     id: sub_id.clone(),
-                    msg: EventMsg::ConversationHistory(ConversationHistoryResponseEvent {
+                    msg: EventMsg::ConversationHistory(ConversationPathResponseEvent {
                         conversation_id: sess.session_id,
-                        entries: sess.state.lock_unchecked().history.contents(),
+                        path: sess
+                            .rollout
+                            .lock_unchecked()
+                            .as_ref()
+                            .map(|r| r.path().to_path_buf())
+                            .unwrap_or_default(),
                     }),
                 };
                 sess.send_event(event).await;
@@ -1422,7 +1427,7 @@ async fn run_task(
     sess.send_event(event).await;
 
     let initial_input_for_turn: ResponseInputItem = ResponseInputItem::from(input);
-    sess.record_conversation_items(&[ResponseItem::from(initial_input_for_turn.clone())])
+    sess.record_conversation_items(ResponseItem::from(initial_input_for_turn.clone()))
         .await;
 
     let mut last_agent_message: Option<String> = None;
@@ -1439,7 +1444,9 @@ async fn run_task(
             .into_iter()
             .map(ResponseItem::from)
             .collect::<Vec<ResponseItem>>();
-        sess.record_conversation_items(&pending_input).await;
+        for item in pending_input.iter().cloned() {
+            sess.record_conversation_items(item).await;
+        }
 
         // Construct the input that we will send to the model. When using the
         // Chat completions API (or ZDR clients), the model needs the full
@@ -1566,8 +1573,9 @@ async fn run_task(
 
                 // Only attempt to take the lock if there is something to record.
                 if !items_to_record_in_conversation_history.is_empty() {
-                    sess.record_conversation_items(&items_to_record_in_conversation_history)
-                        .await;
+                    for item in items_to_record_in_conversation_history.iter().cloned() {
+                        sess.record_conversation_items(item).await;
+                    }
                 }
 
                 if responses.is_empty() {
