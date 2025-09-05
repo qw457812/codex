@@ -336,7 +336,7 @@ Defines the list of MCP servers that Codex can consult for tool use. Currently, 
 
 **Note:** Codex may cache the list of tools and resources from an MCP server so that Codex can include this information in context at startup without spawning all the servers. This is designed to save resources by loading MCP servers lazily.
 
-Each server may set `timeout_ms` to adjust how long Codex waits for it to start and respond to a tools listing. The default is `10000` (10 seconds).
+Each server may set `startup_timeout_ms` to adjust how long Codex waits for it to start and respond to a tools listing. The default is `10000` (10 seconds).
 
 This config option is comparable to how Claude and Cursor define `mcpServers` in their respective JSON config files, though because Codex uses TOML for its config language, the format is slightly different. For example, the following config in JSON:
 
@@ -363,7 +363,7 @@ command = "npx"
 args = ["-y", "mcp-server"]
 env = { "API_KEY" = "value" }
 # Optional: override the default 10s startup timeout
-timeout_ms = 20000
+startup_timeout_ms = 20000
 ```
 
 ## disable_response_storage

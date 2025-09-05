@@ -251,56 +251,36 @@ impl McpConnectionManager {
 
 /// Query every server for its available tools and return a single map that
 /// contains **all** tools. Each key is the fully-qualified name for the tool.
-async fn list_all_tools(
-    clients: &mut HashMap<String, ManagedClient>,
-) -> Result<(Vec<ToolInfo>, ClientStartErrors)> {
+async fn list_all_tools(clients: &mut HashMap<String, ManagedClient>) -> Result<Vec<ToolInfo>> {
     let mut join_set = JoinSet::new();
 
     // Spawn one task per server so we can query them concurrently. This
     // keeps the overall latency roughly at the slowest server instead of
     // the cumulative latency.
-    for (server_name, managed) in clients.iter() {
+    for (server_name, managed_client) in clients.iter() {
         let server_name_cloned = server_name.clone();
-        let client_clone = managed.client.clone();
-        let timeout = managed.timeout;
+        let client_clone = managed_client.client.clone();
+        let startup_timeout = managed_client.startup_timeout;
         join_set.spawn(async move {
-            let res = client_clone.list_tools(None, Some(timeout)).await;
-            let snippet = client_clone.output_snippet().await;
-            (server_name_cloned, res, snippet)
+            let res = client_clone.list_tools(None, Some(startup_timeout)).await;
+            (server_name_cloned, res)
         });
     }
 
     let mut aggregated: Vec<ToolInfo> = Vec::with_capacity(join_set.len());
-    let mut errors = ClientStartErrors::new();
 
     while let Some(join_res) = join_set.join_next().await {
-        let (server_name, list_result, snippet) = join_res?;
-        match list_result {
-            Ok(list_result) => {
-                for tool in list_result.tools {
-                    let tool_info = ToolInfo {
-                        server_name: server_name.clone(),
-                        tool_name: tool.name.clone(),
-                        tool,
-                    };
-                    aggregated.push(tool_info);
-                }
-            }
-            Err(e) => {
-                let (stdout, stderr) = snippet;
-                let err = anyhow!(
-                    "tools/list failed: {e}\nstdout:\n{}\nstderr:\n{}",
-                    stdout.join("\n"),
-                    stderr.join("\n")
-                );
-                errors.insert(server_name.clone(), err);
-            }
-        }
-    }
+        let (server_name, list_result) = join_res?;
+        let list_result = list_result?;
 
-    // Drop clients that failed to list tools.
-    for server_name in errors.keys() {
-        clients.remove(server_name);
+        for tool in list_result.tools {
+            let tool_info = ToolInfo {
+                server_name: server_name.clone(),
+                tool_name: tool.name.clone(),
+                tool,
+            };
+            aggregated.push(tool_info);
+        }
     }
 
     info!(
@@ -309,7 +289,7 @@ async fn list_all_tools(
         clients.len()
     );
 
-    Ok((aggregated, errors))
+    Ok(aggregated)
 }
 
 fn is_valid_mcp_server_name(server_name: &str) -> bool {
