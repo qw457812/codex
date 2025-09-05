@@ -200,7 +200,7 @@ pub struct ListConversationsParams {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationSummary {
-    pub id: String,
+    pub conversation_id: ConversationId,
     pub path: PathBuf,
     pub preview: String,
     /// RFC3339 timestamp string for the session start, if available.
