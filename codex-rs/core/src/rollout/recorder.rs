@@ -221,10 +221,7 @@ impl RolloutRecorder {
     pub async fn get_rollout_history(path: &Path) -> std::io::Result<InitialHistory> {
         info!("Resuming rollout from {path:?}");
         let text = tokio::fs::read_to_string(path).await?;
-        let mut lines = text.lines();
-        let _ = lines
-            .next()
-            .ok_or_else(|| IoError::other("empty session file"))?;
+        let lines = text.lines();
         let mut items: Vec<RolloutItem> = Vec::new();
 
         for line in lines {
