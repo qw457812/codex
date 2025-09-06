@@ -563,13 +563,9 @@ impl CodexMessageProcessor {
             }
         };
 
-        // Build summaries
-        let mut items: Vec<ConversationSummary> = Vec::new();
-        for it in page.items.into_iter() {
-            if let Some(summary) = extract_conversation_summary(it.path, &it.head) {
-                items.push(summary);
-            }
-        }
+        let items = page.items.into_iter()
+            .filter_map(|it| extract_conversation_summary(it.path, &it.head))
+            .collect();
 
         // Encode next_cursor as a plain string
         let next_cursor = match page.next_cursor {
@@ -1085,7 +1081,7 @@ async fn on_exec_approval_response(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct RolloutFirstLine {
     id: ConversationId,
     timestamp: Option<String>,
