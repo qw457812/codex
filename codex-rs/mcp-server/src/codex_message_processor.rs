@@ -515,7 +515,7 @@ impl CodexMessageProcessor {
                     ..
                 } = conversation_id;
                 let response = NewConversationResponse {
-                    conversation_id: ConversationId(conversation_id),
+                    conversation_id,
                     model: session_configured.model,
                 };
                 self.outgoing.send_response(request_id, response).await;
@@ -627,7 +627,7 @@ impl CodexMessageProcessor {
 
                 // Reply with conversation id + model and initial messages (when present)
                 let response = codex_protocol::mcp_protocol::ResumeConversationResponse {
-                    conversation_id: ConversationId(conversation_id),
+                    conversation_id,
                     model: session_configured.model.clone(),
                     initial_messages: session_configured.initial_messages.clone(),
                 };
@@ -651,7 +651,7 @@ impl CodexMessageProcessor {
         } = params;
         let Ok(conversation) = self
             .conversation_manager
-            .get_conversation(conversation_id.0)
+            .get_conversation(conversation_id)
             .await
         else {
             let error = JSONRPCErrorError {
@@ -699,7 +699,7 @@ impl CodexMessageProcessor {
 
         let Ok(conversation) = self
             .conversation_manager
-            .get_conversation(conversation_id.0)
+            .get_conversation(conversation_id)
             .await
         else {
             let error = JSONRPCErrorError {
@@ -745,7 +745,7 @@ impl CodexMessageProcessor {
         let InterruptConversationParams { conversation_id } = params;
         let Ok(conversation) = self
             .conversation_manager
-            .get_conversation(conversation_id.0)
+            .get_conversation(conversation_id)
             .await
         else {
             let error = JSONRPCErrorError {
@@ -775,7 +775,7 @@ impl CodexMessageProcessor {
         let AddConversationListenerParams { conversation_id } = params;
         let Ok(conversation) = self
             .conversation_manager
-            .get_conversation(conversation_id.0)
+            .get_conversation(conversation_id)
             .await
         else {
             let error = JSONRPCErrorError {
@@ -1081,10 +1081,12 @@ async fn on_exec_approval_response(
     }
 }
 
+
+// TODO: can this be merged with the other one?
 #[derive(Debug, Deserialize)]
-struct RolloutFirstLine {
-    id: ConversationId,
-    timestamp: Option<String>,
+pub struct RolloutFirstLine {
+    pub id: ConversationId,
+    pub timestamp: Option<String>,
 }
 
 fn extract_conversation_summary(

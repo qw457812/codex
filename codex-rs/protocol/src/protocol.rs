@@ -18,10 +18,10 @@ use serde::Serialize;
 use serde_with::serde_as;
 use strum_macros::Display;
 use ts_rs::TS;
-use uuid::Uuid;
 
 use crate::config_types::ReasoningEffort as ReasoningEffortConfig;
 use crate::config_types::ReasoningSummary as ReasoningSummaryConfig;
+use crate::mcp_protocol::ConversationId;
 use crate::message_history::HistoryEntry;
 use crate::models::ResponseItem;
 use crate::parse_command::ParsedCommand;
@@ -741,7 +741,7 @@ pub struct WebSearchEndEvent {
 /// in-memory transcript.
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 pub struct ConversationHistoryResponseEvent {
-    pub conversation_id: Uuid,
+    pub conversation_id: ConversationId,
     pub entries: Vec<ResponseItem>,
 }
 
@@ -884,7 +884,7 @@ pub struct ListCustomPromptsResponseEvent {
 #[derive(Debug, Default, Clone, Deserialize, Serialize, TS)]
 pub struct SessionConfiguredEvent {
     /// Unique id for this session.
-    pub session_id: Uuid,
+    pub session_id: ConversationId,
 
     /// Tell the client what model is being queried.
     pub model: String,
@@ -966,7 +966,7 @@ mod tests {
     /// amount of nesting.
     #[test]
     fn serialize_event() {
-        let session_id: Uuid = uuid::uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8");
+        let session_id = ConversationId(uuid::uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"));
         let event = Event {
             id: "1234".to_string(),
             msg: EventMsg::SessionConfigured(SessionConfiguredEvent {

@@ -19,7 +19,7 @@ use strum_macros::Display;
 use ts_rs::TS;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, Default, Hash)]
 #[ts(type = "string")]
 pub struct ConversationId(pub Uuid);
 

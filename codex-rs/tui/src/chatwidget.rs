@@ -84,7 +84,7 @@ use codex_core::protocol::AskForApproval;
 use codex_core::protocol::SandboxPolicy;
 use codex_core::protocol_config_types::ReasoningEffort as ReasoningEffortConfig;
 use codex_file_search::FileMatch;
-use uuid::Uuid;
+use codex_protocol::mcp_protocol::ConversationId;
 
 // Track information about an in-flight exec command.
 struct RunningCommand {
@@ -121,7 +121,7 @@ pub(crate) struct ChatWidget {
     reasoning_buffer: String,
     // Accumulates full reasoning content for transcript-only recording
     full_reasoning_buffer: String,
-    session_id: Option<Uuid>,
+    session_id: Option<ConversationId>,
     frame_requester: FrameRequester,
     // Whether to include the initial welcome banner on session configured
     show_welcome_banner: bool,
@@ -1356,7 +1356,7 @@ impl ChatWidget {
         &self.total_token_usage
     }
 
-    pub(crate) fn session_id(&self) -> Option<Uuid> {
+    pub(crate) fn session_id(&self) -> Option<ConversationId> {
         self.session_id
     }
 
