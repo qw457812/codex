@@ -30,7 +30,6 @@ use tracing::error;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
-use uuid::Uuid;
 
 use crate::ModelProviderInfo;
 use crate::apply_patch;
@@ -365,7 +364,7 @@ impl Session {
         session_id: Option<ConversationId>,
         initial_history: InitialHistory,
     ) -> anyhow::Result<(Arc<Self>, TurnContext)> {
-        let session_id = session_id.unwrap_or_else(|| ConversationId(Uuid::new_v4()));
+        let session_id = session_id.unwrap_or_else(|| ConversationId::new());
         let ConfigureSession {
             provider,
             model,
