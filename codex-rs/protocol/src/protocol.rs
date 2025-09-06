@@ -528,7 +528,7 @@ pub struct TokenUsage {
     pub total_tokens: u64,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
 pub struct TokenUsageInfo {
     pub total_token_usage: TokenUsage,
     pub last_token_usage: TokenUsage,
@@ -565,7 +565,7 @@ impl TokenUsageInfo {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
 pub struct TokenCountEvent {
     pub info: Option<TokenUsageInfo>,
 }
