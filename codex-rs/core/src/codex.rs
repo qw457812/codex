@@ -364,7 +364,7 @@ impl Session {
         session_id: Option<ConversationId>,
         initial_history: InitialHistory,
     ) -> anyhow::Result<(Arc<Self>, TurnContext)> {
-        let session_id = session_id.unwrap_or_else(|| ConversationId::new());
+        let session_id = session_id.unwrap_or_default();
         let ConfigureSession {
             provider,
             model,
