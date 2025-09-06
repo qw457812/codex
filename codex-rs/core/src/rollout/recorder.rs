@@ -2,7 +2,7 @@
 
 use std::fs::File;
 use std::fs::{self};
-use std::io::{Error as IoError};
+use std::io::Error as IoError;
 use std::path::Path;
 
 use super::SESSIONS_SUBDIR;
@@ -11,7 +11,8 @@ use super::list::Cursor;
 use super::list::get_conversations;
 use super::policy::is_persisted_response_item;
 use crate::config::Config;
-use crate::conversation_manager::{InitialHistory, RolloutFirstLine};
+use crate::conversation_manager::InitialHistory;
+use crate::conversation_manager::RolloutFirstLine;
 use crate::git_info::GitInfo;
 use crate::git_info::collect_git_info;
 use codex_protocol::mcp_protocol::ConversationId;
