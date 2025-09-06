@@ -89,6 +89,7 @@ use crate::protocol::ExecCommandBeginEvent;
 use crate::protocol::ExecCommandEndEvent;
 use crate::protocol::FileChange;
 use crate::protocol::InputItem;
+use crate::protocol::InputMessageKind;
 use crate::protocol::ListCustomPromptsResponseEvent;
 use crate::protocol::Op;
 use crate::protocol::PatchApplyBeginEvent;
@@ -564,6 +565,12 @@ impl Session {
             .iter()
             .flat_map(|item| {
                 map_response_item_to_event_messages(item, self.show_raw_agent_reasoning)
+            })
+            .filter(|event| {
+                if let EventMsg::UserMessage(user_message) = event {
+                    return matches!(user_message.kind, Some(InputMessageKind::Plain));
+                }
+                true
             })
             .collect()
     }
