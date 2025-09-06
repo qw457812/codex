@@ -103,6 +103,7 @@ use crate::protocol::TokenUsageInfo;
 use crate::protocol::TurnDiffEvent;
 use crate::protocol::WebSearchBeginEvent;
 use crate::rollout::RolloutRecorder;
+use crate::rollout::RolloutRecorderParams;
 use crate::safety::SafetyCheck;
 use crate::safety::assess_command_safety;
 use crate::safety::assess_safety_for_untrusted_command;
@@ -170,6 +171,7 @@ impl Codex {
         auth_manager: Arc<AuthManager>,
         conversation_id: Option<ConversationId>,
         conversation_history: InitialHistory,
+        rollout_path: Option<PathBuf>,
     ) -> CodexResult<CodexSpawnOk> {
         let (tx_sub, rx_sub) = async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
         let (tx_event, rx_event) = async_channel::unbounded();
@@ -199,6 +201,7 @@ impl Codex {
             tx_event.clone(),
             conversation_id,
             conversation_history.clone(),
+            rollout_path,
         )
         .await
         .map_err(|e| {
@@ -361,8 +364,9 @@ impl Session {
         tx_event: Sender<Event>,
         session_id: Option<ConversationId>,
         initial_history: InitialHistory,
+        rollout_path: Option<PathBuf>,
     ) -> anyhow::Result<(Arc<Self>, TurnContext)> {
-        let session_id = session_id.unwrap_or_default();
+        let session_id = session_id.unwrap_or_else(|| ConversationId::new());
         let ConfigureSession {
             provider,
             model,
@@ -389,7 +393,11 @@ impl Session {
         // - spin up MCP connection manager
         // - perform default shell discovery
         // - load history metadata
-        let rollout_fut = RolloutRecorder::new(&config, session_id, user_instructions.clone());
+        let rollout_params = match rollout_path {
+            Some(path) => RolloutRecorderParams::resume(path),
+            None => RolloutRecorderParams::new(session_id, user_instructions.clone()),
+        };
+        let rollout_fut = RolloutRecorder::new(&config, rollout_params);
 
         let mcp_fut = McpConnectionManager::new(config.mcp_servers.clone());
         let default_shell_fut = shell::default_user_shell();

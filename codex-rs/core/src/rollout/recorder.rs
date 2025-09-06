@@ -4,6 +4,7 @@ use std::fs::File;
 use std::fs::{self};
 use std::io::Error as IoError;
 use std::path::Path;
+use std::path::PathBuf;
 
 use super::SESSIONS_SUBDIR;
 use super::list::ConversationsPage;
@@ -73,10 +74,43 @@ pub struct RolloutRecorder {
     tx: Sender<RolloutCmd>,
 }
 
+#[derive(Clone)]
+pub struct RolloutRecorderParams {
+    kind: RolloutRecorderKind,
+}
+
+#[derive(Clone)]
+enum RolloutRecorderKind {
+    Create {
+        conversation_id: ConversationId,
+        instructions: Option<String>,
+    },
+    Resume {
+        path: PathBuf,
+    },
+}
+
 enum RolloutCmd {
     AddItems(Vec<ResponseItem>),
     UpdateState(SessionStateSnapshot),
     Shutdown { ack: oneshot::Sender<()> },
+}
+
+impl RolloutRecorderParams {
+    pub fn new(conversation_id: ConversationId, instructions: Option<String>) -> Self {
+        Self {
+            kind: RolloutRecorderKind::Create {
+                conversation_id,
+                instructions,
+            },
+        }
+    }
+
+    pub fn resume(path: PathBuf) -> Self {
+        Self {
+            kind: RolloutRecorderKind::Resume { path },
+        }
+    }
 }
 
 impl RolloutRecorder {
@@ -93,24 +127,43 @@ impl RolloutRecorder {
     /// Attempt to create a new [`RolloutRecorder`]. If the sessions directory
     /// cannot be created or the rollout file cannot be opened we return the
     /// error so the caller can decide whether to disable persistence.
-    pub async fn new(
-        config: &Config,
-        conversation_id: ConversationId,
-        instructions: Option<String>,
-    ) -> std::io::Result<Self> {
-        let LogFileInfo {
-            file,
-            session_id,
-            timestamp,
-        } = create_log_file(config, conversation_id.0)?;
+    pub async fn new(config: &Config, params: RolloutRecorderParams) -> std::io::Result<Self> {
+        let (file, meta) = match params.kind {
+            RolloutRecorderKind::Create {
+                conversation_id,
+                instructions,
+            } => {
+                let LogFileInfo {
+                    file,
+                    session_id,
+                    timestamp,
+                } = create_log_file(config, conversation_id.0)?;
 
-        let timestamp_format: &[FormatItem] = format_description!(
-            "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
-        );
-        let timestamp = timestamp
-            .to_offset(time::UtcOffset::UTC)
-            .format(timestamp_format)
-            .map_err(|e| IoError::other(format!("failed to format timestamp: {e}")))?;
+                let timestamp_format: &[FormatItem] = format_description!(
+                    "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
+                );
+                let timestamp = timestamp
+                    .to_offset(time::UtcOffset::UTC)
+                    .format(timestamp_format)
+                    .map_err(|e| IoError::other(format!("failed to format timestamp: {e}")))?;
+
+                (
+                    tokio::fs::File::from_std(file),
+                    Some(SessionMeta {
+                        timestamp,
+                        id: session_id,
+                        instructions,
+                    }),
+                )
+            }
+            RolloutRecorderKind::Resume { path } => (
+                tokio::fs::OpenOptions::new()
+                    .append(true)
+                    .open(path)
+                    .await?,
+                None,
+            ),
+        };
 
         // Clone the cwd for the spawned task to collect git info asynchronously
         let cwd = config.cwd.clone();
@@ -123,16 +176,7 @@ impl RolloutRecorder {
         // Spawn a Tokio task that owns the file handle and performs async
         // writes. Using `tokio::fs::File` keeps everything on the async I/O
         // driver instead of blocking the runtime.
-        tokio::task::spawn(rollout_writer(
-            tokio::fs::File::from_std(file),
-            rx,
-            Some(SessionMeta {
-                timestamp,
-                id: session_id,
-                instructions,
-            }),
-            cwd,
-        ));
+        tokio::task::spawn(rollout_writer(file, rx, meta, cwd));
 
         Ok(Self { tx })
     }
@@ -355,7 +399,7 @@ impl JsonlWriter {
     async fn write_line(&mut self, item: &impl serde::Serialize) -> std::io::Result<()> {
         let mut json = serde_json::to_string(item)?;
         json.push('\n');
-        let _ = self.file.write_all(json.as_bytes()).await;
+        self.file.write_all(json.as_bytes()).await?;
         self.file.flush().await?;
         Ok(())
     }

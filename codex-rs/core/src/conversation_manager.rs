@@ -1,11 +1,5 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
-use serde::Deserialize;
 use crate::AuthManager;
 use crate::CodexAuth;
-use tokio::sync::RwLock;
-use codex_protocol::mcp_protocol::ConversationId;
 use crate::codex::Codex;
 use crate::codex::CodexSpawnOk;
 use crate::codex::INITIAL_SUBMIT_ID;
@@ -17,7 +11,13 @@ use crate::protocol::Event;
 use crate::protocol::EventMsg;
 use crate::protocol::SessionConfiguredEvent;
 use crate::rollout::RolloutRecorder;
+use codex_protocol::mcp_protocol::ConversationId;
 use codex_protocol::models::ResponseItem;
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum InitialHistory {
@@ -33,12 +33,11 @@ pub struct NewConversation {
     pub session_configured: SessionConfiguredEvent,
 }
 
-// TODO can this be merged with the other one?
+// TODO: can we use SessionMeta
 #[derive(Debug, Deserialize)]
 pub struct RolloutFirstLine {
     pub id: ConversationId,
 }
-
 
 /// [`ConversationManager`] is responsible for creating conversations and
 /// maintaining them in memory.
@@ -72,18 +71,26 @@ impl ConversationManager {
         auth_manager: Arc<AuthManager>,
     ) -> CodexResult<NewConversation> {
         // TO BE REFACTORED: use the config experimental_resume field until we have a mainstream way.
-        if let Some(resume_path) = config.experimental_resume.as_ref() {
-            let (conversation_id, initial_history) = RolloutRecorder::get_rollout_history(resume_path).await?;
+        if let Some(resume_path) = config.experimental_resume.clone() {
+            let (conversation_id, initial_history) =
+                RolloutRecorder::get_rollout_history(&resume_path).await?;
             let CodexSpawnOk {
                 codex,
                 session_id: conversation_id,
-            } = Codex::spawn(config, auth_manager, conversation_id, initial_history).await?;
+            } = Codex::spawn(
+                config,
+                auth_manager,
+                conversation_id,
+                initial_history,
+                Some(resume_path.clone()),
+            )
+            .await?;
             self.finalize_spawn(codex, conversation_id).await
         } else {
             let CodexSpawnOk {
                 codex,
                 session_id: conversation_id,
-            } = { Codex::spawn(config, auth_manager, None, InitialHistory::New).await? };
+            } = { Codex::spawn(config, auth_manager, None, InitialHistory::New, None).await? };
             self.finalize_spawn(codex, conversation_id).await
         }
     }
@@ -137,11 +144,19 @@ impl ConversationManager {
         rollout_path: PathBuf,
         auth_manager: Arc<AuthManager>,
     ) -> CodexResult<NewConversation> {
-        let (conversation_id, initial_history) = RolloutRecorder::get_rollout_history(&rollout_path).await?;
+        let (conversation_id, initial_history) =
+            RolloutRecorder::get_rollout_history(&rollout_path).await?;
         let CodexSpawnOk {
             codex,
             session_id: conversation_id,
-        } = Codex::spawn(config, auth_manager, conversation_id, initial_history).await?;
+        } = Codex::spawn(
+            config,
+            auth_manager,
+            conversation_id,
+            initial_history,
+            Some(rollout_path),
+        )
+        .await?;
         self.finalize_spawn(codex, conversation_id).await
     }
 
@@ -168,7 +183,7 @@ impl ConversationManager {
         let CodexSpawnOk {
             codex,
             session_id: conversation_id,
-        } = Codex::spawn(config, auth_manager, None, history).await?;
+        } = Codex::spawn(config, auth_manager, None, history, None).await?;
 
         self.finalize_spawn(codex, conversation_id).await
     }

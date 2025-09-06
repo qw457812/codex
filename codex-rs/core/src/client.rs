@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use crate::AuthManager;
 use bytes::Bytes;
-use codex_protocol::mcp_protocol::{AuthMode, ConversationId};
+use codex_protocol::mcp_protocol::AuthMode;
+use codex_protocol::mcp_protocol::ConversationId;
 use eventsource_stream::Eventsource;
 use futures::prelude::*;
 use regex_lite::Regex;

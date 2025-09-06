@@ -563,7 +563,9 @@ impl CodexMessageProcessor {
             }
         };
 
-        let items = page.items.into_iter()
+        let items = page
+            .items
+            .into_iter()
             .filter_map(|it| extract_conversation_summary(it.path, &it.head))
             .collect();
 
@@ -1080,8 +1082,7 @@ async fn on_exec_approval_response(
     }
 }
 
-
-// TODO: can this be merged with the other one?
+// TODO: can we use SessionMeta?
 #[derive(Debug, Deserialize)]
 pub struct RolloutFirstLine {
     pub id: ConversationId,
