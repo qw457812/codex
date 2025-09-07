@@ -27,6 +27,7 @@ use codex_core::protocol::McpInvocation;
 use codex_core::protocol::SandboxPolicy;
 use codex_core::protocol::SessionConfiguredEvent;
 use codex_core::protocol::TokenUsage;
+use codex_protocol::mcp_protocol::ConversationId;
 use codex_protocol::parse_command::ParsedCommand;
 use image::DynamicImage;
 use image::ImageReader;
@@ -49,7 +50,6 @@ use std::time::Duration;
 use std::time::Instant;
 use tracing::error;
 use unicode_width::UnicodeWidthStr;
-use codex_protocol::mcp_protocol::ConversationId;
 
 #[derive(Clone, Debug)]
 pub(crate) struct CommandOutput {

@@ -258,7 +258,8 @@ pub(crate) struct OutgoingError {
 mod tests {
     use codex_core::protocol::EventMsg;
     use codex_core::protocol::SessionConfiguredEvent;
-    use codex_protocol::mcp_protocol::{ConversationId, LoginChatGptCompleteNotification};
+    use codex_protocol::mcp_protocol::ConversationId;
+    use codex_protocol::mcp_protocol::LoginChatGptCompleteNotification;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use uuid::Uuid;

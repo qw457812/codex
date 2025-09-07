@@ -366,7 +366,7 @@ impl Session {
         initial_history: InitialHistory,
         rollout_path: Option<PathBuf>,
     ) -> anyhow::Result<(Arc<Self>, TurnContext)> {
-        let session_id = session_id.unwrap_or_else(|| ConversationId::new());
+        let session_id = session_id.unwrap_or_else(ConversationId::new);
         let ConfigureSession {
             provider,
             model,

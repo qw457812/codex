@@ -8,6 +8,7 @@ use codex_core::ResponseEvent;
 use codex_core::ResponseItem;
 use codex_core::WireApi;
 use codex_core::spawn::CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR;
+use codex_protocol::mcp_protocol::ConversationId;
 use core_test_support::load_default_config_for_test;
 use futures::StreamExt;
 use tempfile::TempDir;
@@ -16,7 +17,6 @@ use wiremock::MockServer;
 use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
-use codex_protocol::mcp_protocol::ConversationId;
 
 fn network_disabled() -> bool {
     std::env::var(CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR).is_ok()

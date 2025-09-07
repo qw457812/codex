@@ -13,7 +13,6 @@ use super::list::get_conversations;
 use super::policy::is_persisted_response_item;
 use crate::config::Config;
 use crate::conversation_manager::InitialHistory;
-use crate::conversation_manager::RolloutFirstLine;
 use crate::git_info::GitInfo;
 use crate::git_info::collect_git_info;
 use codex_protocol::mcp_protocol::ConversationId;
@@ -217,13 +216,13 @@ impl RolloutRecorder {
         let first_line = lines
             .next()
             .ok_or_else(|| IoError::other("empty session file"))?;
-        let conversation_id = match serde_json::from_str::<RolloutFirstLine>(first_line) {
-            Ok(rollout_first_line) => {
+        let conversation_id = match serde_json::from_str::<SessionMeta>(first_line) {
+            Ok(rollout_session_meta) => {
                 tracing::error!(
                     "Parsed conversation ID from rollout file: {:?}",
-                    rollout_first_line.id
+                    rollout_session_meta.id
                 );
-                Some(rollout_first_line.id)
+                Some(ConversationId(rollout_session_meta.id))
             }
             Err(e) => {
                 return Err(IoError::other(format!(

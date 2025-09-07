@@ -13,7 +13,6 @@ use crate::protocol::SessionConfiguredEvent;
 use crate::rollout::RolloutRecorder;
 use codex_protocol::mcp_protocol::ConversationId;
 use codex_protocol::models::ResponseItem;
-use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -31,12 +30,6 @@ pub struct NewConversation {
     pub conversation_id: ConversationId,
     pub conversation: Arc<CodexConversation>,
     pub session_configured: SessionConfiguredEvent,
-}
-
-// TODO: can we use SessionMeta
-#[derive(Debug, Deserialize)]
-pub struct RolloutFirstLine {
-    pub id: ConversationId,
 }
 
 /// [`ConversationManager`] is responsible for creating conversations and

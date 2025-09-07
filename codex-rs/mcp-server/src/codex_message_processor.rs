@@ -9,6 +9,7 @@ use codex_core::ConversationManager;
 use codex_core::Cursor as RolloutCursor;
 use codex_core::NewConversation;
 use codex_core::RolloutRecorder;
+use codex_core::SessionMeta;
 use codex_core::auth::CLIENT_ID;
 use codex_core::config::Config;
 use codex_core::config::ConfigOverrides;
@@ -69,7 +70,6 @@ use codex_protocol::protocol::InputMessageKind;
 use codex_protocol::protocol::USER_MESSAGE_BEGIN;
 use mcp_types::JSONRPCErrorError;
 use mcp_types::RequestId;
-use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -1082,20 +1082,13 @@ async fn on_exec_approval_response(
     }
 }
 
-// TODO: can we use SessionMeta?
-#[derive(Debug, Deserialize)]
-pub struct RolloutFirstLine {
-    pub id: ConversationId,
-    pub timestamp: Option<String>,
-}
-
 fn extract_conversation_summary(
     path: PathBuf,
     head: &[serde_json::Value],
 ) -> Option<ConversationSummary> {
-    let first_line = match head.first() {
-        Some(first_line) => match serde_json::from_value::<RolloutFirstLine>(first_line.clone()) {
-            Ok(rollout_first_line) => rollout_first_line,
+    let session_meta = match head.first() {
+        Some(first_line) => match serde_json::from_value::<SessionMeta>(first_line.clone()) {
+            Ok(session_meta) => session_meta,
             Err(..) => return None,
         },
         None => return None,
@@ -1124,9 +1117,15 @@ fn extract_conversation_summary(
         None => preview.as_str(),
     };
 
+    let timestamp = if session_meta.timestamp.is_empty() {
+        None
+    } else {
+        Some(session_meta.timestamp.clone())
+    };
+
     Some(ConversationSummary {
-        conversation_id: first_line.id,
-        timestamp: first_line.timestamp,
+        conversation_id: ConversationId(session_meta.id),
+        timestamp,
         path,
         preview: preview.to_string(),
     })
