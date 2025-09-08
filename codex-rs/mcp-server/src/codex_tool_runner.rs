@@ -119,12 +119,12 @@ pub async fn run_codex_tool_session_reply(
     request_id: RequestId,
     prompt: String,
     running_requests_id_to_codex_uuid: Arc<Mutex<HashMap<RequestId, ConversationId>>>,
-    session_id: ConversationId,
+    conversation_id: ConversationId,
 ) {
     running_requests_id_to_codex_uuid
         .lock()
         .await
-        .insert(request_id.clone(), session_id);
+        .insert(request_id.clone(), conversation_id);
     if let Err(e) = conversation
         .submit(Op::UserInput {
             items: vec![InputItem::Text { text: prompt }],

@@ -103,7 +103,7 @@ pub(crate) struct CodexMessageProcessor {
     conversation_listeners: HashMap<Uuid, oneshot::Sender<()>>,
     active_login: Arc<Mutex<Option<ActiveLogin>>>,
     // Queue of pending interrupt requests per conversation. We reply when TurnAborted arrives.
-    pending_interrupts: Arc<Mutex<HashMap<Uuid, Vec<RequestId>>>>,
+    pending_interrupts: Arc<Mutex<HashMap<ConversationId, Vec<RequestId>>>>,
 }
 
 impl CodexMessageProcessor {
@@ -762,7 +762,7 @@ impl CodexMessageProcessor {
         // Record the pending interrupt so we can reply when TurnAborted arrives.
         {
             let mut map = self.pending_interrupts.lock().await;
-            map.entry(conversation_id.0).or_default().push(request_id);
+            map.entry(conversation_id).or_default().push(request_id);
         }
 
         // Submit the interrupt; we'll respond upon TurnAborted.
@@ -782,7 +782,7 @@ impl CodexMessageProcessor {
         else {
             let error = JSONRPCErrorError {
                 code: INVALID_REQUEST_ERROR_CODE,
-                message: format!("conversation not found: {}", conversation_id.0),
+                message: format!("conversation not found: {conversation_id}"),
                 data: None,
             };
             self.outgoing.send_error(request_id, error).await;
@@ -895,7 +895,7 @@ async fn apply_bespoke_event_handling(
     conversation_id: ConversationId,
     conversation: Arc<CodexConversation>,
     outgoing: Arc<OutgoingMessageSender>,
-    pending_interrupts: Arc<Mutex<HashMap<Uuid, Vec<RequestId>>>>,
+    pending_interrupts: Arc<Mutex<HashMap<ConversationId, Vec<RequestId>>>>,
 ) {
     let Event { id: event_id, msg } = event;
     match msg {
@@ -948,7 +948,7 @@ async fn apply_bespoke_event_handling(
         EventMsg::TurnAborted(turn_aborted_event) => {
             let pending = {
                 let mut map = pending_interrupts.lock().await;
-                map.remove(&conversation_id.0).unwrap_or_default()
+                map.remove(&conversation_id).unwrap_or_default()
             };
             if !pending.is_empty() {
                 let response = InterruptConversationResponse {
@@ -1124,7 +1124,7 @@ fn extract_conversation_summary(
     };
 
     Some(ConversationSummary {
-        conversation_id: ConversationId(session_meta.id),
+        conversation_id: session_meta.id,
         timestamp,
         path,
         preview: preview.to_string(),

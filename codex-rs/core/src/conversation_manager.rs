@@ -69,7 +69,7 @@ impl ConversationManager {
                 RolloutRecorder::get_rollout_history(&resume_path).await?;
             let CodexSpawnOk {
                 codex,
-                session_id: conversation_id,
+                conversation_id,
             } = Codex::spawn(
                 config,
                 auth_manager,
@@ -82,8 +82,8 @@ impl ConversationManager {
         } else {
             let CodexSpawnOk {
                 codex,
-                session_id: conversation_id,
-            } = { Codex::spawn(config, auth_manager, None, InitialHistory::New, None).await? };
+                conversation_id,
+            } = Codex::spawn(config, auth_manager, None, InitialHistory::New, None).await?;
             self.finalize_spawn(codex, conversation_id).await
         }
     }
@@ -141,7 +141,7 @@ impl ConversationManager {
             RolloutRecorder::get_rollout_history(&rollout_path).await?;
         let CodexSpawnOk {
             codex,
-            session_id: conversation_id,
+            conversation_id,
         } = Codex::spawn(
             config,
             auth_manager,
@@ -175,7 +175,7 @@ impl ConversationManager {
         let auth_manager = self.auth_manager.clone();
         let CodexSpawnOk {
             codex,
-            session_id: conversation_id,
+            conversation_id,
         } = Codex::spawn(config, auth_manager, None, history, None).await?;
 
         self.finalize_spawn(codex, conversation_id).await

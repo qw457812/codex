@@ -437,7 +437,10 @@ impl MessageProcessor {
         tracing::info!("tools/call -> params: {:?}", arguments);
 
         // parse arguments
-        let CodexToolCallReplyParam { session_id, prompt } = match arguments {
+        let CodexToolCallReplyParam {
+            conversation_id,
+            prompt,
+        } = match arguments {
             Some(json_val) => match serde_json::from_value::<CodexToolCallReplyParam>(json_val) {
                 Ok(params) => params,
                 Err(e) => {
@@ -458,12 +461,12 @@ impl MessageProcessor {
             },
             None => {
                 tracing::error!(
-                    "Missing arguments for codex-reply tool-call; the `session_id` and `prompt` fields are required."
+                    "Missing arguments for codex-reply tool-call; the `conversation_id` and `prompt` fields are required."
                 );
                 let result = CallToolResult {
                     content: vec![ContentBlock::TextContent(TextContent {
                         r#type: "text".to_owned(),
-                        text: "Missing arguments for codex-reply tool-call; the `session_id` and `prompt` fields are required.".to_owned(),
+                        text: "Missing arguments for codex-reply tool-call; the `conversation_id` and `prompt` fields are required.".to_owned(),
                         annotations: None,
                     })],
                     is_error: Some(true),
@@ -474,14 +477,14 @@ impl MessageProcessor {
                 return;
             }
         };
-        let session_id = match Uuid::parse_str(&session_id) {
-            Ok(id) => ConversationId(id),
+        let conversation_id = match Uuid::parse_str(&conversation_id) {
+            Ok(id) => ConversationId::from(id),
             Err(e) => {
-                tracing::error!("Failed to parse session_id: {e}");
+                tracing::error!("Failed to parse conversation_id: {e}");
                 let result = CallToolResult {
                     content: vec![ContentBlock::TextContent(TextContent {
                         r#type: "text".to_owned(),
-                        text: format!("Failed to parse session_id: {e}"),
+                        text: format!("Failed to parse conversation_id: {e}"),
                         annotations: None,
                     })],
                     is_error: Some(true),
@@ -497,14 +500,18 @@ impl MessageProcessor {
         let outgoing = self.outgoing.clone();
         let running_requests_id_to_codex_uuid = self.running_requests_id_to_codex_uuid.clone();
 
-        let codex = match self.conversation_manager.get_conversation(session_id).await {
+        let codex = match self
+            .conversation_manager
+            .get_conversation(conversation_id)
+            .await
+        {
             Ok(c) => c,
             Err(_) => {
-                tracing::warn!("Session not found for session_id: {session_id}");
+                tracing::warn!("Session not found for conversation_id: {conversation_id}");
                 let result = CallToolResult {
                     content: vec![ContentBlock::TextContent(TextContent {
                         r#type: "text".to_owned(),
-                        text: format!("Session not found for session_id: {session_id}"),
+                        text: format!("Session not found for conversation_id: {conversation_id}"),
                         annotations: None,
                     })],
                     is_error: Some(true),
@@ -529,7 +536,7 @@ impl MessageProcessor {
                     request_id,
                     prompt,
                     running_requests_id_to_codex_uuid,
-                    session_id,
+                    conversation_id,
                 )
                 .await;
             }
@@ -565,24 +572,28 @@ impl MessageProcessor {
             RequestId::Integer(i) => i.to_string(),
         };
 
-        // Obtain the session_id while holding the first lock, then release.
-        let session_id = {
+        // Obtain the conversation id while holding the first lock, then release.
+        let conversation_id = {
             let map_guard = self.running_requests_id_to_codex_uuid.lock().await;
             match map_guard.get(&request_id) {
-                Some(id) => *id, // Uuid is Copy
+                Some(id) => *id,
                 None => {
                     tracing::warn!("Session not found for request_id: {}", request_id_string);
                     return;
                 }
             }
         };
-        tracing::info!("session_id: {session_id}");
+        tracing::info!("conversation_id: {conversation_id}");
 
         // Obtain the Codex conversation from the server.
-        let codex_arc = match self.conversation_manager.get_conversation(session_id).await {
+        let codex_arc = match self
+            .conversation_manager
+            .get_conversation(conversation_id)
+            .await
+        {
             Ok(c) => c,
             Err(_) => {
-                tracing::warn!("Session not found for session_id: {session_id}");
+                tracing::warn!("Session not found for conversation_id: {conversation_id}");
                 return;
             }
         };
